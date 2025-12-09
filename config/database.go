@@ -1,6 +1,7 @@
 package config
 
 import (
+	"database/sql"
 	"fmt"
 	"log"
 	"os"
@@ -8,8 +9,6 @@ import (
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
-
-	"virtual-cuppa-be/models"
 )
 
 var DB *gorm.DB
@@ -34,14 +33,24 @@ func ConnectDatabase() {
 
 	log.Println("Database connection established")
 
-	err = database.AutoMigrate(&models.User{})
+	sqlDB, err := database.DB()
 	if err != nil {
-		log.Fatal("Failed to migrate database:", err)
+		log.Fatal("Failed to get database instance:", err)
 	}
 
-	log.Println("Database migration completed")
+	migrationsPath := getMigrationsPath()
+	if err := RunMigrations(sqlDB, migrationsPath); err != nil {
+		log.Fatal("Failed to run migrations:", err)
+	}
 
 	DB = database
+}
+
+func GetSQLDB() (*sql.DB, error) {
+	if DB == nil {
+		return nil, fmt.Errorf("database not initialized")
+	}
+	return DB.DB()
 }
 
 func getEnv(key, defaultValue string) string {

@@ -39,15 +39,81 @@ Server will start on `http://localhost:8080`
 
 ```
 virtual-cuppa-be/
-├── config/          # Configuration (database)
+├── cmd/             # CLI tools
+│   └── migrate/     # Migration CLI
+├── config/          # Configuration (database, migrations)
 ├── handlers/        # HTTP handlers
 ├── middleware/      # Middleware (authorization)
+├── migrations/      # SQL migration files
 ├── models/          # Data models
 ├── repositories/    # Data access layer
+├── scripts/         # Helper scripts
 ├── services/        # Business logic layer
 ├── utils/           # Helper utilities (JWT, responses)
 ├── main.go          # Application entry point
 ├── docker-compose.yml
+└── .env             # Environment variables
+```
+
+## Database Migrations
+
+This project uses **golang-migrate** for database migrations.
+
+### Running Migrations
+
+Migrations run automatically when the application starts. To manually manage migrations:
+
+**Run all pending migrations:**
+```bash
+go run cmd/migrate/main.go migrate -up
+```
+
+**Rollback last N migrations:**
+```bash
+go run cmd/migrate/main.go migrate -down 1
+```
+
+**Check current version:**
+```bash
+go run cmd/migrate/main.go migrate -version
+```
+
+### Creating New Migrations
+
+**Windows (PowerShell):**
+```powershell
+.\scripts\create-migration.ps1 add_new_column
+```
+
+**Linux/Mac:**
+```bash
+chmod +x scripts/create-migration.sh
+./scripts/create-migration.sh add_new_column
+```
+
+This will create two files:
+- `migrations/000002_add_new_column.up.sql` - Forward migration
+- `migrations/000002_add_new_column.down.sql` - Rollback migration
+
+### Migration Best Practices
+
+1. **Always test migrations locally first**
+2. **Create rollback migrations** (down.sql)
+3. **Never edit existing migrations** - create new ones
+4. **Use transactions** where possible
+5. **Backup production database** before running migrations
+6. **Keep migrations small and focused**
+
+Example migration:
+```sql
+-- 000002_add_avatar_column.up.sql
+ALTER TABLE users ADD COLUMN avatar VARCHAR(255);
+
+-- 000002_add_avatar_column.down.sql
+ALTER TABLE users DROP COLUMN avatar;
+```
+
+## Project Structure
 └── .env             # Environment variables
 ```
 
@@ -343,5 +409,13 @@ curl -X POST http://localhost:8080/api/admin/confirm-user \
 - ✅ Organisation-based User Management
 - ✅ Layered Architecture (Handler → Service → Repository)
 - ✅ PostgreSQL with GORM
+- ✅ Database Migrations with golang-migrate
 - ✅ Docker Compose for Development
 - ✅ CORS Support
+
+## Migration History
+
+### 000001_create_users_table
+- Creates `users` table with all fields
+- Adds indexes for `email` and `deleted_at`
+- Supports soft deletes
