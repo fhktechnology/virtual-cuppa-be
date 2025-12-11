@@ -1,0 +1,4 @@
+ALTER TABLE users DROP COLUMN IF EXISTS refresh_token;
+ALTER TABLE users DROP COLUMN IF EXISTS is_confirmed;
+ALTER TABLE users DROP COLUMN IF EXISTS last_name;
+ALTER TABLE users DROP COLUMN IF EXISTS first_name;

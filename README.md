@@ -64,16 +64,19 @@ This project uses **golang-migrate** for database migrations.
 Migrations run automatically when the application starts. To manually manage migrations:
 
 **Run all pending migrations:**
+
 ```bash
 go run cmd/migrate/main.go migrate -up
 ```
 
 **Rollback last N migrations:**
+
 ```bash
 go run cmd/migrate/main.go migrate -down 1
 ```
 
 **Check current version:**
+
 ```bash
 go run cmd/migrate/main.go migrate -version
 ```
@@ -81,17 +84,20 @@ go run cmd/migrate/main.go migrate -version
 ### Creating New Migrations
 
 **Windows (PowerShell):**
+
 ```powershell
 .\scripts\create-migration.ps1 add_new_column
 ```
 
 **Linux/Mac:**
+
 ```bash
 chmod +x scripts/create-migration.sh
 ./scripts/create-migration.sh add_new_column
 ```
 
 This will create two files:
+
 - `migrations/000002_add_new_column.up.sql` - Forward migration
 - `migrations/000002_add_new_column.down.sql` - Rollback migration
 
@@ -105,6 +111,7 @@ This will create two files:
 6. **Keep migrations small and focused**
 
 Example migration:
+
 ```sql
 -- 000002_add_avatar_column.up.sql
 ALTER TABLE users ADD COLUMN avatar VARCHAR(255);
@@ -114,8 +121,10 @@ ALTER TABLE users DROP COLUMN avatar;
 ```
 
 ## Project Structure
-└── .env             # Environment variables
-```
+
+└── .env # Environment variables
+
+````
 
 ## Available Endpoints
 
@@ -132,11 +141,10 @@ Register a new user.
   "firstName": "John",
   "lastName": "Doe",
   "email": "user@example.com",
-  "password": "password123",
   "accountType": "User",
   "organisation": "My Company"
 }
-```
+````
 
 **Response:**
 
@@ -158,16 +166,38 @@ Register a new user.
 }
 ```
 
+#### POST /api/auth/request-code
+
+Request a confirmation code to be sent via email (Step 1 of login).
+
+**Body:**
+
+```json
+{
+  "email": "user@example.com"
+}
+```
+
+**Response:**
+
+```json
+{
+  "message": "Confirmation code sent to email"
+}
+```
+
+**Note:** The confirmCode will be sent to the user's email and is valid for 5 minutes.
+
 #### POST /api/auth/login
 
-User login.
+Verify confirmation code and login (Step 2 of login).
 
 **Body:**
 
 ```json
 {
   "email": "user@example.com",
-  "password": "password123"
+  "confirmCode": "123456"
 }
 ```
 
@@ -307,13 +337,39 @@ Check if server is running.
   "firstName": string,
   "lastName": string,
   "email": string,
-  "password": string,          // bcrypt hashed
+  "confirmCode": string (nullable),    // 6-digit code stored in cache (5min TTL)
   "accountType": "User" | "Admin",
   "organisation": string (optional),
-  "isConfirmed": boolean,      // default: true for register, false for CSV import
-  "refreshToken": string       // stored securely
+  "isConfirmed": boolean,              // default: true for register, false for CSV import
+  "refreshToken": string               // stored securely
 }
 ```
+
+## Authentication Flow
+
+### Registration:
+
+1. User submits registration data (no password required)
+2. System generates 6-digit confirmCode
+3. ConfirmCode stored in cache with 5-minute TTL
+4. Email sent to user with confirmCode via SendGrid
+5. User receives JWT tokens immediately
+
+### Login (Two-Step Process):
+
+**Step 1 - Request Code:**
+
+1. User provides email via POST `/api/auth/request-code`
+2. System generates 6-digit confirmCode
+3. ConfirmCode stored in cache with 5-minute TTL
+4. Email sent to user with confirmCode
+
+**Step 2 - Verify Code:**
+
+1. User submits email + confirmCode via POST `/api/auth/login`
+2. System verifies code from cache
+3. Code deleted after successful verification
+4. User receives JWT tokens
 
 ## Environment Variables
 
@@ -326,6 +382,10 @@ DB_NAME=virtual_cuppa
 JWT_SECRET=your-secret-key
 PORT=8080
 GIN_MODE=debug
+
+# SendGrid Configuration
+SENDGRID_API_KEY=your-sendgrid-api-key-here
+CONFIRM_CODE_TEMPLATE_ID=your-sendgrid-template-id-here
 ```
 
 ## Building
@@ -355,7 +415,15 @@ docker-compose down
 ```bash
 curl -X POST http://localhost:8080/api/auth/register \
   -H "Content-Type: application/json" \
-  -d '{"firstName":"John","lastName":"Doe","email":"test@example.com","password":"password123","accountType":"User"}'
+  -d '{"firstName":"John","lastName":"Doe","email":"test@example.com","accountType":"User"}'
+```
+
+### Request Login Code:
+
+```bash
+curl -X POST http://localhost:8080/api/auth/request-code \
+  -H "Content-Type: application/json" \
+  -d '{"email":"test@example.com"}'
 ```
 
 ### Login:
@@ -363,8 +431,10 @@ curl -X POST http://localhost:8080/api/auth/register \
 ```bash
 curl -X POST http://localhost:8080/api/auth/login \
   -H "Content-Type: application/json" \
-  -d '{"email":"test@example.com","password":"password123"}'
+  -d '{"email":"test@example.com","confirmCode":"123456"}'
 ```
+
+**Note:** The confirmCode must be obtained from the email sent during registration or by requesting a new code.
 
 ### Refresh Token:
 
@@ -403,7 +473,7 @@ curl -X POST http://localhost:8080/api/admin/confirm-user \
 - ✅ JWT Authentication with Access & Refresh Tokens
 - ✅ Role-based Authorization (User/Admin)
 - ✅ User Registration & Login
-- ✅ Password Hashing (bcrypt)
+- ✅ ConfirmCode Authentication (6-digit code)
 - ✅ CSV Import for Bulk User Creation (Admin only)
 - ✅ User Confirmation System
 - ✅ Organisation-based User Management
@@ -416,6 +486,13 @@ curl -X POST http://localhost:8080/api/admin/confirm-user \
 ## Migration History
 
 ### 000001_create_users_table
+
 - Creates `users` table with all fields
 - Adds indexes for `email` and `deleted_at`
 - Supports soft deletes
+
+### 000002_remove_password_add_confirm_code
+
+- Removes `password` column from `users` table
+- Adds `confirm_code` VARCHAR(10) column
+- Migrates from password-based to confirmCode authentication

@@ -1,7 +1,9 @@
 package utils
 
 import (
+	"log"
 	"net/http"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 )
@@ -46,6 +48,11 @@ func HandleServiceError(c *gin.Context, err error) {
 	case "user does not belong to admin's organisation":
 		RespondWithError(c, http.StatusForbidden, err.Error())
 	default:
-		RespondWithError(c, http.StatusInternalServerError, "Internal server error")
+		log.Printf("Unhandled service error: %v", err)
+		if strings.Contains(err.Error(), "sendgrid") {
+			RespondWithError(c, http.StatusInternalServerError, "Failed to send email: "+err.Error())
+		} else {
+			RespondWithError(c, http.StatusInternalServerError, "Internal server error")
+		}
 	}
 }

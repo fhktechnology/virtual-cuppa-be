@@ -5,10 +5,10 @@ import (
 	"fmt"
 	"log"
 	"os"
-	"strconv"
+
+	"virtual-cuppa-be/config"
 
 	"github.com/joho/godotenv"
-	"virtual-cuppa-be/config"
 )
 
 func main() {

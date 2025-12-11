@@ -18,7 +18,6 @@ type User struct {
 	FirstName    string         `gorm:"type:varchar(100)" json:"firstName,omitempty"`
 	LastName     string         `gorm:"type:varchar(100)" json:"lastName,omitempty"`
 	Email        string         `gorm:"uniqueIndex;not null" json:"email" binding:"required,email"`
-	Password     string         `gorm:"not null" json:"-"`
 	AccountType  AccountType    `gorm:"type:varchar(10);not null;default:'User'" json:"accountType"`
 	Organisation *string        `gorm:"type:varchar(255)" json:"organisation,omitempty"`
 	IsConfirmed  bool           `gorm:"default:false" json:"isConfirmed"`
@@ -32,14 +31,17 @@ type RegisterInput struct {
 	FirstName    string      `json:"firstName,omitempty"`
 	LastName     string      `json:"lastName,omitempty"`
 	Email        string      `json:"email" binding:"required,email"`
-	Password     string      `json:"password" binding:"required,min=8"`
 	AccountType  AccountType `json:"accountType" binding:"omitempty,oneof=User Admin"`
 	Organisation *string     `json:"organisation,omitempty"`
 }
 
+type RequestCodeInput struct {
+	Email string `json:"email" binding:"required,email"`
+}
+
 type LoginInput struct {
-	Email    string `json:"email" binding:"required,email"`
-	Password string `json:"password" binding:"required"`
+	Email       string `json:"email" binding:"required,email"`
+	ConfirmCode string `json:"confirmCode" binding:"required,len=6"`
 }
 
 type AuthResponse struct {

@@ -4,6 +4,8 @@ import (
 	"crypto/rand"
 	"encoding/base64"
 	"errors"
+	"fmt"
+	"math/big"
 	"os"
 	"time"
 
@@ -60,6 +62,15 @@ func GenerateRefreshToken() (string, error) {
 		return "", err
 	}
 	return base64.URLEncoding.EncodeToString(b), nil
+}
+
+func GenerateConfirmCode() string {
+	code := ""
+	for i := 0; i < 6; i++ {
+		n, _ := rand.Int(rand.Reader, big.NewInt(10))
+		code += fmt.Sprintf("%d", n)
+	}
+	return code
 }
 
 func getEnv(key, defaultValue string) string {

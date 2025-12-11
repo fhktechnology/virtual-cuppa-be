@@ -2,12 +2,11 @@ package services
 
 import (
 	"errors"
+	"time"
 
 	"virtual-cuppa-be/models"
 	"virtual-cuppa-be/repositories"
 	"virtual-cuppa-be/utils"
-
-	"golang.org/x/crypto/bcrypt"
 )
 
 var (
@@ -18,74 +17,96 @@ var (
 )
 
 type AuthService interface {
-	Register(input *models.RegisterInput) (*models.AuthResponse, error)
+	Register(input *models.RegisterInput) error
+	RequestCode(input *models.RequestCodeInput) error
 	Login(input *models.LoginInput) (*models.AuthResponse, error)
 	RefreshToken(refreshToken string) (*models.AuthResponse, error)
 	GetUserByID(id uint) (*models.User, error)
 }
 
 type authService struct {
-	userRepo repositories.UserRepository
+	userRepo     repositories.UserRepository
+	emailService EmailService
 }
 
-func NewAuthService(userRepo repositories.UserRepository) AuthService {
+func NewAuthService(userRepo repositories.UserRepository, emailService EmailService) AuthService {
 	return &authService{
-		userRepo: userRepo,
+		userRepo:     userRepo,
+		emailService: emailService,
 	}
 }
 
-func (s *authService) Register(input *models.RegisterInput) (*models.AuthResponse, error) {
+func (s *authService) Register(input *models.RegisterInput) error {
 	if input.AccountType == "" {
 		input.AccountType = models.AccountTypeUser
 	}
 
 	existingUser, err := s.userRepo.FindByEmail(input.Email)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	if existingUser != nil {
-		return nil, ErrUserAlreadyExists
+		return ErrUserAlreadyExists
 	}
 
-	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(input.Password), bcrypt.DefaultCost)
-	if err != nil {
-		return nil, err
-	}
+	confirmCode := utils.GenerateConfirmCode()
 
 	user := &models.User{
 		FirstName:    input.FirstName,
 		LastName:     input.LastName,
 		Email:        input.Email,
-		Password:     string(hashedPassword),
 		AccountType:  input.AccountType,
 		Organisation: input.Organisation,
 		IsConfirmed:  true,
 	}
 
 	if err := s.userRepo.Create(user); err != nil {
-		return nil, err
+		return err
 	}
 
-	token, err := utils.GenerateToken(user.ID, user.Email, string(user.AccountType))
+	cache := utils.GetConfirmCodeCache()
+	cache.Set(input.Email, confirmCode, 5*time.Minute)
+
+	fullName := input.Email
+	if input.FirstName != "" && input.LastName != "" {
+		fullName = input.FirstName + " " + input.LastName
+	} else if input.FirstName != "" {
+		fullName = input.FirstName
+	}
+	
+	if err := s.emailService.SendConfirmCode(input.Email, fullName, confirmCode); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (s *authService) RequestCode(input *models.RequestCodeInput) error {
+	user, err := s.userRepo.FindByEmail(input.Email)
 	if err != nil {
-		return nil, err
+		return err
+	}
+	if user == nil {
+		return ErrUserNotFound
 	}
 
-	refreshToken, err := utils.GenerateRefreshToken()
-	if err != nil {
-		return nil, err
+	confirmCode := utils.GenerateConfirmCode()
+
+	cache := utils.GetConfirmCodeCache()
+	cache.Set(input.Email, confirmCode, 5*time.Minute)
+
+	fullName := user.Email
+	if user.FirstName != "" && user.LastName != "" {
+		fullName = user.FirstName + " " + user.LastName
+	} else if user.FirstName != "" {
+		fullName = user.FirstName
+	}
+	
+	if err := s.emailService.SendConfirmCode(input.Email, fullName, confirmCode); err != nil {
+		return err
 	}
 
-	user.RefreshToken = &refreshToken
-	if err := s.userRepo.Update(user); err != nil {
-		return nil, err
-	}
-
-	return &models.AuthResponse{
-		Token:        token,
-		RefreshToken: refreshToken,
-		User:         *user,
-	}, nil
+	return nil
 }
 
 func (s *authService) Login(input *models.LoginInput) (*models.AuthResponse, error) {
@@ -97,9 +118,13 @@ func (s *authService) Login(input *models.LoginInput) (*models.AuthResponse, err
 		return nil, ErrInvalidCredentials
 	}
 
-	if err := bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(input.Password)); err != nil {
+	cache := utils.GetConfirmCodeCache()
+	cachedCode, exists := cache.Get(input.Email)
+	if !exists || cachedCode != input.ConfirmCode {
 		return nil, ErrInvalidCredentials
 	}
+
+	cache.Delete(input.Email)
 
 	token, err := utils.GenerateToken(user.ID, user.Email, string(user.AccountType))
 	if err != nil {

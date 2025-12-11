@@ -22,7 +22,8 @@ func main() {
 	config.ConnectDatabase()
 
 	userRepo := repositories.NewUserRepository(config.DB)
-	authService := services.NewAuthService(userRepo)
+	emailService := services.NewEmailService()
+	authService := services.NewAuthService(userRepo, emailService)
 	userService := services.NewUserService(userRepo)
 	authHandler := handlers.NewAuthHandler(authService)
 	userHandler := handlers.NewUserHandler(userService)
@@ -53,6 +54,7 @@ func main() {
 	auth := router.Group("/api/auth")
 	{
 		auth.POST("/register", authHandler.Register)
+		auth.POST("/request-code", authHandler.RequestCode)
 		auth.POST("/login", authHandler.Login)
 		auth.POST("/refresh", authHandler.RefreshToken)
 	}

@@ -1,0 +1,1 @@
+ALTER TABLE users ADD COLUMN confirm_code VARCHAR(10);

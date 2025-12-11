@@ -28,13 +28,34 @@ func (h *AuthHandler) Register(c *gin.Context) {
 		return
 	}
 
-	response, err := h.authService.Register(&input)
+	err := h.authService.Register(&input)
 	if err != nil {
 		utils.HandleServiceError(c, err)
 		return
 	}
 
-	utils.RespondWithSuccess(c, http.StatusCreated, response)
+	utils.RespondWithSuccess(c, http.StatusCreated, gin.H{
+		"message": "Registration successful. Confirmation code sent to email",
+	})
+}
+
+func (h *AuthHandler) RequestCode(c *gin.Context) {
+	var input models.RequestCodeInput
+
+	if err := c.ShouldBindJSON(&input); err != nil {
+		utils.RespondWithError(c, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	err := h.authService.RequestCode(&input)
+	if err != nil {
+		utils.HandleServiceError(c, err)
+		return
+	}
+
+	utils.RespondWithSuccess(c, http.StatusOK, gin.H{
+		"message": "Confirmation code sent to email",
+	})
 }
 
 func (h *AuthHandler) Login(c *gin.Context) {

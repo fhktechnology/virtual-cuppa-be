@@ -8,8 +8,6 @@ import (
 
 	"virtual-cuppa-be/models"
 	"virtual-cuppa-be/repositories"
-
-	"golang.org/x/crypto/bcrypt"
 )
 
 var (
@@ -58,11 +56,6 @@ func (s *userService) ImportUsersFromCSV(adminID uint, csvContent io.Reader) (in
 	}
 
 	var users []*models.User
-	defaultPassword := "ChangeMe123!"
-	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(defaultPassword), bcrypt.DefaultCost)
-	if err != nil {
-		return 0, err
-	}
 
 	startIndex := 0
 	if len(records) > 0 {
@@ -98,7 +91,6 @@ func (s *userService) ImportUsersFromCSV(adminID uint, csvContent io.Reader) (in
 			FirstName:    firstName,
 			LastName:     lastName,
 			Email:        email,
-			Password:     string(hashedPassword),
 			AccountType:  models.AccountTypeUser,
 			Organisation: admin.Organisation,
 			IsConfirmed:  false,
