@@ -1,6 +1,8 @@
 package handlers
 
 import (
+	"fmt"
+	"log"
 	"net/http"
 
 	"virtual-cuppa-be/models"
@@ -71,26 +73,92 @@ func (h *UserHandler) ConfirmUser(c *gin.Context) {
 }
 
 func (h *UserHandler) GetOrganisationUsers(c *gin.Context) {
-	_, exists := c.Get("userID")
+	userID, exists := c.Get("userID")
+	if !exists {
+		log.Println("GetOrganisationUsers: userID not found in context")
+		utils.RespondWithError(c, http.StatusUnauthorized, "Unauthorized")
+		return
+	}
+
+	log.Printf("GetOrganisationUsers: userID=%v", userID)
+
+	// Get current user to retrieve organisationID
+	currentUser, err := h.userService.GetUserByID(userID.(uint))
+	if err != nil {
+		log.Printf("GetOrganisationUsers: error getting user: %v", err)
+		utils.HandleServiceError(c, err)
+		return
+	}
+
+	log.Printf("GetOrganisationUsers: currentUser=%+v, organisationID=%v", currentUser.Email, currentUser.OrganisationID)
+
+	if currentUser.OrganisationID == nil {
+		log.Println("GetOrganisationUsers: user has no organisationID")
+		utils.RespondWithError(c, http.StatusBadRequest, "User not assigned to any organisation")
+		return
+	}
+
+	users, err := h.userService.GetUsersByOrganisation(*currentUser.OrganisationID)
+	if err != nil {
+		log.Printf("GetOrganisationUsers: error getting users: %v", err)
+		utils.HandleServiceError(c, err)
+		return
+	}
+
+	log.Printf("GetOrganisationUsers: found %d users", len(users))
+	utils.RespondWithSuccess(c, http.StatusOK, gin.H{
+		"users": users,
+		"count": len(users),
+	})
+}
+
+func (h *UserHandler) CreateUser(c *gin.Context) {
+	userID, exists := c.Get("userID")
 	if !exists {
 		utils.RespondWithError(c, http.StatusUnauthorized, "Unauthorized")
 		return
 	}
 
-	organisation := c.Query("organisation")
-	if organisation == "" {
-		utils.RespondWithError(c, http.StatusBadRequest, "organisation query parameter is required")
+	var input models.CreateUserInput
+	if err := c.ShouldBindJSON(&input); err != nil {
+		utils.RespondWithError(c, http.StatusBadRequest, err.Error())
 		return
 	}
 
-	users, err := h.userService.GetUsersByOrganisation(organisation)
+	user, err := h.userService.CreateUser(userID.(uint), &input)
 	if err != nil {
 		utils.HandleServiceError(c, err)
 		return
 	}
 
+	utils.RespondWithSuccess(c, http.StatusCreated, user)
+}
+
+func (h *UserHandler) DeleteUser(c *gin.Context) {
+	userID, exists := c.Get("userID")
+	if !exists {
+		utils.RespondWithError(c, http.StatusUnauthorized, "Unauthorized")
+		return
+	}
+
+	targetUserID := c.Param("id")
+	if targetUserID == "" {
+		utils.RespondWithError(c, http.StatusBadRequest, "User ID is required")
+		return
+	}
+
+	var id uint
+	if _, err := fmt.Sscanf(targetUserID, "%d", &id); err != nil {
+		utils.RespondWithError(c, http.StatusBadRequest, "Invalid user ID")
+		return
+	}
+
+	if err := h.userService.DeleteUser(userID.(uint), id); err != nil {
+		utils.HandleServiceError(c, err)
+		return
+	}
+
 	utils.RespondWithSuccess(c, http.StatusOK, gin.H{
-		"users": users,
-		"count": len(users),
+		"message": "User deleted successfully",
 	})
 }

@@ -14,12 +14,17 @@ var (
 	ErrAdminNoOrganisation = errors.New("admin must be assigned to an organisation to import users")
 	ErrInvalidCSVFormat    = errors.New("invalid CSV format, expected: firstName,lastName,email")
 	ErrEmptyCSV            = errors.New("CSV file is empty")
+	ErrEmailExists         = errors.New("user with this email already exists")
 )
 
 type UserService interface {
 	ImportUsersFromCSV(adminID uint, csvContent io.Reader) (int, error)
 	ConfirmUser(adminID uint, userID uint) error
-	GetUsersByOrganisation(organisation string) ([]*models.User, error)
+	GetUsersByOrganisation(organisationID uint) ([]*models.User, error)
+	GetUserByID(userID uint) (*models.User, error)
+	UpdateUser(user *models.User) error
+	CreateUser(adminID uint, input *models.CreateUserInput) (*models.User, error)
+	DeleteUser(adminID uint, userID uint) error
 }
 
 type userService struct {
@@ -41,7 +46,7 @@ func (s *userService) ImportUsersFromCSV(adminID uint, csvContent io.Reader) (in
 		return 0, ErrUserNotFound
 	}
 
-	if admin.Organisation == nil || *admin.Organisation == "" {
+	if admin.OrganisationID == nil {
 		return 0, ErrAdminNoOrganisation
 	}
 
@@ -88,12 +93,12 @@ func (s *userService) ImportUsersFromCSV(adminID uint, csvContent io.Reader) (in
 		}
 
 		user := &models.User{
-			FirstName:    firstName,
-			LastName:     lastName,
-			Email:        email,
-			AccountType:  models.AccountTypeUser,
-			Organisation: admin.Organisation,
-			IsConfirmed:  false,
+			FirstName:      firstName,
+			LastName:       lastName,
+			Email:          email,
+			AccountType:    models.AccountTypeUser,
+			OrganisationID: admin.OrganisationID,
+			IsConfirmed:    false,
 		}
 
 		users = append(users, user)
@@ -120,7 +125,7 @@ func (s *userService) ConfirmUser(adminID uint, userID uint) error {
 		return ErrUserNotFound
 	}
 
-	if admin.Organisation == nil || *admin.Organisation == "" {
+	if admin.OrganisationID == nil {
 		return ErrAdminNoOrganisation
 	}
 
@@ -132,7 +137,7 @@ func (s *userService) ConfirmUser(adminID uint, userID uint) error {
 		return ErrUserNotFound
 	}
 
-	if user.Organisation == nil || *user.Organisation != *admin.Organisation {
+	if user.OrganisationID == nil || *user.OrganisationID != *admin.OrganisationID {
 		return errors.New("user does not belong to admin's organisation")
 	}
 
@@ -140,6 +145,81 @@ func (s *userService) ConfirmUser(adminID uint, userID uint) error {
 	return s.userRepo.Update(user)
 }
 
-func (s *userService) GetUsersByOrganisation(organisation string) ([]*models.User, error) {
-	return s.userRepo.FindByOrganisation(organisation)
+func (s *userService) GetUsersByOrganisation(organisationID uint) ([]*models.User, error) {
+	return s.userRepo.FindByOrganisation(organisationID)
+}
+
+func (s *userService) GetUserByID(userID uint) (*models.User, error) {
+	return s.userRepo.FindByID(userID)
+}
+
+func (s *userService) UpdateUser(user *models.User) error {
+	return s.userRepo.Update(user)
+}
+
+func (s *userService) CreateUser(adminID uint, input *models.CreateUserInput) (*models.User, error) {
+	admin, err := s.userRepo.FindByID(adminID)
+	if err != nil {
+		return nil, err
+	}
+	if admin == nil {
+		return nil, ErrUserNotFound
+	}
+
+	if admin.OrganisationID == nil {
+		return nil, ErrAdminNoOrganisation
+	}
+
+	// Check if user with this email already exists
+	existingUser, err := s.userRepo.FindByEmail(input.Email)
+	if err != nil {
+		return nil, err
+	}
+	if existingUser != nil {
+		return nil, ErrEmailExists
+	}
+
+	user := &models.User{
+		FirstName:      input.FirstName,
+		LastName:       input.LastName,
+		Email:          input.Email,
+		AccountType:    models.AccountTypeUser,
+		OrganisationID: admin.OrganisationID,
+		IsConfirmed:    false,
+	}
+
+	if err := s.userRepo.Create(user); err != nil {
+		return nil, err
+	}
+
+	return user, nil
+}
+
+func (s *userService) DeleteUser(adminID uint, userID uint) error {
+	admin, err := s.userRepo.FindByID(adminID)
+	if err != nil {
+		return err
+	}
+	if admin == nil {
+		return ErrUserNotFound
+	}
+
+	if admin.OrganisationID == nil {
+		return ErrAdminNoOrganisation
+	}
+
+	user, err := s.userRepo.FindByID(userID)
+	if err != nil {
+		return err
+	}
+	if user == nil {
+		return ErrUserNotFound
+	}
+
+	// Check if user belongs to the same organisation
+	if user.OrganisationID == nil || *user.OrganisationID != *admin.OrganisationID {
+		return errors.New("user does not belong to your organisation")
+	}
+
+	return s.userRepo.Delete(userID)
 }

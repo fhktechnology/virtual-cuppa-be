@@ -22,11 +22,14 @@ func main() {
 	config.ConnectDatabase()
 
 	userRepo := repositories.NewUserRepository(config.DB)
+	orgRepo := repositories.NewOrganisationRepository(config.DB)
 	emailService := services.NewEmailService()
 	authService := services.NewAuthService(userRepo, emailService)
 	userService := services.NewUserService(userRepo)
+	orgService := services.NewOrganisationService(orgRepo)
 	authHandler := handlers.NewAuthHandler(authService)
 	userHandler := handlers.NewUserHandler(userService)
+	orgHandler := handlers.NewOrganisationHandler(orgService, userService)
 
 	router := gin.Default()
 
@@ -63,6 +66,7 @@ func main() {
 	api.Use(middleware.AuthRequired())
 	{
 		api.GET("/profile", authHandler.GetProfile)
+		api.GET("/organisation", orgHandler.GetOrganisation)
 
 		admin := api.Group("/admin")
 		admin.Use(middleware.AdminRequired())
@@ -72,9 +76,13 @@ func main() {
 					"message": "Welcome to admin dashboard",
 				})
 			})
-			admin.POST("/import-csv", userHandler.ImportCSV)
-			admin.POST("/confirm-user", userHandler.ConfirmUser)
-			admin.GET("/users", userHandler.GetOrganisationUsers)
+		admin.POST("/import-csv", userHandler.ImportCSV)
+		admin.POST("/confirm-user", userHandler.ConfirmUser)
+		admin.GET("/users", userHandler.GetOrganisationUsers)
+		admin.POST("/users", userHandler.CreateUser)
+		admin.DELETE("/users/:id", userHandler.DeleteUser)
+		admin.GET("/organisation", orgHandler.GetOrganisation)
+		admin.PUT("/organisation", orgHandler.UpsertOrganisation)
 		}
 	}
 

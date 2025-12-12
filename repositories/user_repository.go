@@ -14,7 +14,7 @@ type UserRepository interface {
 	FindByEmail(email string) (*models.User, error)
 	FindByID(id uint) (*models.User, error)
 	FindByRefreshToken(token string) (*models.User, error)
-	FindByOrganisation(organisation string) ([]*models.User, error)
+	FindByOrganisation(organisationID uint) ([]*models.User, error)
 	Update(user *models.User) error
 	Delete(id uint) error
 }
@@ -71,9 +71,9 @@ func (r *userRepository) FindByRefreshToken(token string) (*models.User, error) 
 	return &user, nil
 }
 
-func (r *userRepository) FindByOrganisation(organisation string) ([]*models.User, error) {
+func (r *userRepository) FindByOrganisation(organisationID uint) ([]*models.User, error) {
 	var users []*models.User
-	err := r.db.Where("organisation = ?", organisation).Find(&users).Error
+	err := r.db.Where("organisation_id = ?", organisationID).Find(&users).Error
 	if err != nil {
 		return nil, err
 	}

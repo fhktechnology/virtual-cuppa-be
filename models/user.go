@@ -14,25 +14,26 @@ const (
 )
 
 type User struct {
-	ID           uint           `gorm:"primarykey" json:"id"`
-	FirstName    string         `gorm:"type:varchar(100)" json:"firstName,omitempty"`
-	LastName     string         `gorm:"type:varchar(100)" json:"lastName,omitempty"`
-	Email        string         `gorm:"uniqueIndex;not null" json:"email" binding:"required,email"`
-	AccountType  AccountType    `gorm:"type:varchar(10);not null;default:'User'" json:"accountType"`
-	Organisation *string        `gorm:"type:varchar(255)" json:"organisation,omitempty"`
-	IsConfirmed  bool           `gorm:"default:false" json:"isConfirmed"`
-	RefreshToken *string        `gorm:"type:text" json:"-"`
-	CreatedAt    time.Time      `json:"createdAt"`
-	UpdatedAt    time.Time      `json:"updatedAt"`
-	DeletedAt    gorm.DeletedAt `gorm:"index" json:"-"`
+	ID             uint           `gorm:"primarykey" json:"id"`
+	FirstName      string         `gorm:"type:varchar(100)" json:"firstName,omitempty"`
+	LastName       string         `gorm:"type:varchar(100)" json:"lastName,omitempty"`
+	Email          string         `gorm:"uniqueIndex;not null" json:"email" binding:"required,email"`
+	AccountType    AccountType    `gorm:"type:varchar(10);not null;default:'User'" json:"accountType"`
+	OrganisationID *uint          `gorm:"index" json:"organisationId,omitempty"`
+	Organisation   *Organisation  `gorm:"foreignKey:OrganisationID" json:"organisation,omitempty"`
+	IsConfirmed    bool           `gorm:"default:false" json:"isConfirmed"`
+	RefreshToken   *string        `gorm:"type:text" json:"-"`
+	CreatedAt      time.Time      `json:"createdAt"`
+	UpdatedAt      time.Time      `json:"updatedAt"`
+	DeletedAt      gorm.DeletedAt `gorm:"index" json:"-"`
 }
 
 type RegisterInput struct {
-	FirstName    string      `json:"firstName,omitempty"`
-	LastName     string      `json:"lastName,omitempty"`
-	Email        string      `json:"email" binding:"required,email"`
-	AccountType  AccountType `json:"accountType" binding:"omitempty,oneof=User Admin"`
-	Organisation *string     `json:"organisation,omitempty"`
+	FirstName      string      `json:"firstName,omitempty"`
+	LastName       string      `json:"lastName,omitempty"`
+	Email          string      `json:"email" binding:"required,email"`
+	AccountType    AccountType `json:"accountType" binding:"omitempty,oneof=User Admin"`
+	OrganisationID *uint       `json:"organisationId,omitempty"`
 }
 
 type RequestCodeInput struct {
@@ -62,4 +63,16 @@ type CSVUserInput struct {
 
 type ConfirmUserInput struct {
 	UserID uint `json:"userId" binding:"required"`
+}
+
+type UpsertOrganisationInput struct {
+	ID         uint   `json:"id"`
+	Name       string `json:"name" binding:"required"`
+	CompanyUrl string `json:"companyUrl,omitempty"`
+}
+
+type CreateUserInput struct {
+	FirstName string `json:"firstName" binding:"required"`
+	LastName  string `json:"lastName" binding:"required"`
+	Email     string `json:"email" binding:"required,email"`
 }

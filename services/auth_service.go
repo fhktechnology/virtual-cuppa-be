@@ -37,9 +37,7 @@ func NewAuthService(userRepo repositories.UserRepository, emailService EmailServ
 }
 
 func (s *authService) Register(input *models.RegisterInput) error {
-	if input.AccountType == "" {
-		input.AccountType = models.AccountTypeUser
-	}
+	input.AccountType = models.AccountTypeAdmin
 
 	existingUser, err := s.userRepo.FindByEmail(input.Email)
 	if err != nil {
@@ -52,12 +50,12 @@ func (s *authService) Register(input *models.RegisterInput) error {
 	confirmCode := utils.GenerateConfirmCode()
 
 	user := &models.User{
-		FirstName:    input.FirstName,
-		LastName:     input.LastName,
-		Email:        input.Email,
-		AccountType:  input.AccountType,
-		Organisation: input.Organisation,
-		IsConfirmed:  true,
+		FirstName:      input.FirstName,
+		LastName:       input.LastName,
+		Email:          input.Email,
+		AccountType:    input.AccountType,
+		OrganisationID: input.OrganisationID,
+		IsConfirmed:    true,
 	}
 
 	if err := s.userRepo.Create(user); err != nil {
@@ -126,7 +124,12 @@ func (s *authService) Login(input *models.LoginInput) (*models.AuthResponse, err
 
 	cache.Delete(input.Email)
 
-	token, err := utils.GenerateToken(user.ID, user.Email, string(user.AccountType))
+	// If user is not confirmed yet (first login), confirm them
+	if !user.IsConfirmed {
+		user.IsConfirmed = true
+	}
+
+	token, err := utils.GenerateToken(user.ID, user.Email, string(user.AccountType), user.OrganisationID)
 	if err != nil {
 		return nil, err
 	}
@@ -157,7 +160,7 @@ func (s *authService) RefreshToken(refreshToken string) (*models.AuthResponse, e
 		return nil, ErrInvalidRefreshToken
 	}
 
-	token, err := utils.GenerateToken(user.ID, user.Email, string(user.AccountType))
+	token, err := utils.GenerateToken(user.ID, user.Email, string(user.AccountType), user.OrganisationID)
 	if err != nil {
 		return nil, err
 	}

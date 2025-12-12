@@ -15,17 +15,19 @@ import (
 var jwtSecret = []byte(getEnv("JWT_SECRET", "your-secret-key-change-in-production"))
 
 type Claims struct {
-	UserID      uint   `json:"user_id"`
-	Email       string `json:"email"`
-	AccountType string `json:"account_type"`
+	UserID         uint   `json:"user_id"`
+	Email          string `json:"email"`
+	AccountType    string `json:"account_type"`
+	OrganisationID *uint  `json:"organisation_id,omitempty"`
 	jwt.RegisteredClaims
 }
 
-func GenerateToken(userID uint, email string, accountType string) (string, error) {
+func GenerateToken(userID uint, email string, accountType string, organisationID *uint) (string, error) {
 	claims := Claims{
-		UserID:      userID,
-		Email:       email,
-		AccountType: accountType,
+		UserID:         userID,
+		Email:          email,
+		AccountType:    accountType,
+		OrganisationID: organisationID,
 		RegisteredClaims: jwt.RegisteredClaims{
 			ExpiresAt: jwt.NewNumericDate(time.Now().Add(24 * time.Hour)),
 			IssuedAt:  jwt.NewNumericDate(time.Now()),
