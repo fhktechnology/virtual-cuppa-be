@@ -23,9 +23,10 @@ func main() {
 
 	userRepo := repositories.NewUserRepository(config.DB)
 	orgRepo := repositories.NewOrganisationRepository(config.DB)
+	tagRepo := repositories.NewTagRepository(config.DB)
 	emailService := services.NewEmailService()
 	authService := services.NewAuthService(userRepo, emailService)
-	userService := services.NewUserService(userRepo)
+	userService := services.NewUserService(userRepo, orgRepo, tagRepo, emailService)
 	orgService := services.NewOrganisationService(orgRepo)
 	authHandler := handlers.NewAuthHandler(authService)
 	userHandler := handlers.NewUserHandler(userService)
@@ -81,6 +82,7 @@ func main() {
 		admin.GET("/users", userHandler.GetOrganisationUsers)
 		admin.POST("/users", userHandler.CreateUser)
 		admin.DELETE("/users/:id", userHandler.DeleteUser)
+		admin.PATCH("/users/:userId/tags", userHandler.UpdateTags)
 		admin.GET("/organisation", orgHandler.GetOrganisation)
 		admin.PUT("/organisation", orgHandler.UpsertOrganisation)
 		}

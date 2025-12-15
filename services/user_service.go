@@ -25,15 +25,22 @@ type UserService interface {
 	UpdateUser(user *models.User) error
 	CreateUser(adminID uint, input *models.CreateUserInput) (*models.User, error)
 	DeleteUser(adminID uint, userID uint) error
+	UpdateUserTags(adminID uint, userID uint, tagNames []string) error
 }
 
 type userService struct {
 	userRepo repositories.UserRepository
+	orgRepo  repositories.OrganisationRepository
+	tagRepo  repositories.TagRepository
+	emailSvc EmailService
 }
 
-func NewUserService(userRepo repositories.UserRepository) UserService {
+func NewUserService(userRepo repositories.UserRepository, orgRepo repositories.OrganisationRepository, tagRepo repositories.TagRepository, emailSvc EmailService) UserService {
 	return &userService{
 		userRepo: userRepo,
+		orgRepo:  orgRepo,
+		tagRepo:  tagRepo,
+		emailSvc: emailSvc,
 	}
 }
 
@@ -192,6 +199,15 @@ func (s *userService) CreateUser(adminID uint, input *models.CreateUserInput) (*
 		return nil, err
 	}
 
+	// Send invitation email
+	org, err := s.orgRepo.FindByID(*admin.OrganisationID)
+	if err == nil && org != nil {
+		if err := s.emailSvc.SendInvitation(user.Email, user.FirstName+" "+user.LastName, org.Name); err != nil {
+			// Log error but don't fail user creation
+			// In production, you might want to use proper logging
+		}
+	}
+
 	return user, nil
 }
 
@@ -222,4 +238,49 @@ func (s *userService) DeleteUser(adminID uint, userID uint) error {
 	}
 
 	return s.userRepo.Delete(userID)
+}
+
+func (s *userService) UpdateUserTags(adminID uint, userID uint, tagNames []string) error {
+	admin, err := s.userRepo.FindByID(adminID)
+	if err != nil {
+		return err
+	}
+	if admin == nil {
+		return ErrUserNotFound
+	}
+
+	if admin.OrganisationID == nil {
+		return ErrAdminNoOrganisation
+	}
+
+	user, err := s.userRepo.FindByID(userID)
+	if err != nil {
+		return err
+	}
+	if user == nil {
+		return ErrUserNotFound
+	}
+
+	// Check if user belongs to the same organisation
+	if user.OrganisationID == nil || *user.OrganisationID != *admin.OrganisationID {
+		return errors.New("user does not belong to your organisation")
+	}
+
+	// Clear existing tags
+	if err := s.tagRepo.ClearUserTags(userID); err != nil {
+		return err
+	}
+
+	// Assign new tags
+	for _, tagName := range tagNames {
+		tag, err := s.tagRepo.FindOrCreateByName(tagName, *admin.OrganisationID)
+		if err != nil {
+			return err
+		}
+		if err := s.tagRepo.AssignTagToUser(userID, tag.ID); err != nil {
+			return err
+		}
+	}
+
+	return nil
 }

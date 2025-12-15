@@ -73,7 +73,7 @@ func (r *userRepository) FindByRefreshToken(token string) (*models.User, error) 
 
 func (r *userRepository) FindByOrganisation(organisationID uint) ([]*models.User, error) {
 	var users []*models.User
-	err := r.db.Where("organisation_id = ?", organisationID).Find(&users).Error
+	err := r.db.Preload("Tags").Where("organisation_id = ?", organisationID).Find(&users).Error
 	if err != nil {
 		return nil, err
 	}

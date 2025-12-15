@@ -162,3 +162,36 @@ func (h *UserHandler) DeleteUser(c *gin.Context) {
 		"message": "User deleted successfully",
 	})
 }
+
+func (h *UserHandler) UpdateTags(c *gin.Context) {
+	userID, exists := c.Get("userID")
+	if !exists {
+		utils.RespondWithError(c, http.StatusUnauthorized, "Unauthorized")
+		return
+	}
+
+	targetUserID := c.Param("userId")
+	if targetUserID == "" {
+		utils.RespondWithError(c, http.StatusBadRequest, "User ID is required")
+		return
+	}
+
+	var id uint
+	if _, err := fmt.Sscanf(targetUserID, "%d", &id); err != nil {
+		utils.RespondWithError(c, http.StatusBadRequest, "Invalid user ID")
+		return
+	}
+
+	var input models.UpdateTagsInput
+	if err := c.ShouldBindJSON(&input); err != nil {
+		utils.RespondWithError(c, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	if err := h.userService.UpdateUserTags(userID.(uint), id, input.Tags); err != nil {
+		utils.HandleServiceError(c, err)
+		return
+	}
+
+	utils.RespondWithSuccess(c, http.StatusOK, gin.H{"message": "Tags updated successfully"})
+}
