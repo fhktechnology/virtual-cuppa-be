@@ -1,8 +1,53 @@
 openapi: 3.0.3
 info:
   title: Virtual Cuppa API
-  description: Backend API for Virtual Cuppa application with email-based authentication
-  version: 1.0.0
+  description: |
+    Backend API for Virtual Cuppa application with email-based authentication and automatic matching system.
+
+    ## Features
+    - Email-based authentication with 6-digit codes
+    - User tagging system for better matching
+    - Automatic match generation every Monday at 9 AM
+    - Manual match triggering for admins
+    - Match acceptance/rejection workflow
+    - SendGrid email notifications
+
+    ## Matching System
+    The system automatically generates matches between users based on:
+    - **Tag compatibility**: Jaccard similarity (common tags / total unique tags × 100)
+    - **User availability**: No pending matches
+    - **Cooldown period**: 30-day minimum between same users
+    - **One match per user**: Each user can have only one pending match at a time
+
+    ### Match Acceptance Flow
+    - **Two-step acceptance**: Both users must accept for the match to be fully accepted
+    - Match remains **pending** until both users accept
+    - If first user accepts, match stays pending for the second user
+    - Once both accept, status changes to **accepted**
+    - If either user rejects, status immediately changes to **rejected**
+
+    ### Automatic Scheduler
+    - Runs every **Monday at 9:00 AM**
+    - Processes **all organisations** automatically
+    - Can be manually triggered via `/api/admin/matches/trigger-scheduler`
+
+    ## Email Notifications
+    The system uses SendGrid with three email templates:
+
+    1. **CONFIRM_CODE_TEMPLATE_ID**: 6-digit confirmation code
+       - Sent during registration
+       - Sent when user requests a new code
+       - Dynamic data: `confirmCode`
+
+    2. **INVITATION_TEMPLATE_ID**: User invitation
+       - Sent when admin creates a new user
+       - Dynamic data: `OrganisationName`
+
+    3. **MATCH_NOTIFICATION_TEMPLATE_ID**: Match notification
+       - Sent to both users when a match is created
+       - Dynamic data: `MatchName` (other user's name), `Date`, `Time`, `MatchScore`
+
+  version: 2.0.0
   contact:
     email: noreply@notacv.com
 
@@ -14,9 +59,11 @@ tags:
   - name: Authentication
     description: User authentication and registration endpoints
   - name: User
-    description: User profile endpoints
+    description: User profile and match endpoints
   - name: Admin
-    description: Admin-only endpoints
+    description: Admin-only endpoints for user management, organisation settings, and match control
+  - name: Matches
+    description: Match generation and management endpoints
 
 paths:
   /health:
@@ -564,7 +611,16 @@ paths:
       tags:
         - Admin
       summary: Update user tags
-      description: Update tags for a user in the admin's organisation (admin only)
+      description: |
+        Update tags for a user in the admin's organisation.
+
+        **Behavior**:
+        - Removes all existing tags from the user
+        - Creates new tags if they don't exist
+        - Assigns all specified tags to the user
+
+        **Use case**: Tags are used for matching algorithm to calculate compatibility scores.
+        Users with similar tags will have higher match scores.
       security:
         - BearerAuth: []
       parameters:
@@ -627,6 +683,39 @@ paths:
                 $ref: "#/components/schemas/Error"
 
   /api/admin/organisation:
+    get:
+      tags:
+        - Admin
+      summary: Get organisation
+      description: Get organisation details for the currently logged-in user (admin only, alias for backward compatibility)
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: Organisation details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Organisation"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "403":
+          description: Forbidden - Admin access required
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404":
+          description: User not assigned to any organisation or organisation not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
     put:
       tags:
         - Admin
@@ -681,6 +770,712 @@ paths:
               schema:
                 $ref: "#/components/schemas/Error"
 
+  /api/matches/current:
+    get:
+      tags:
+        - User
+        - Matches
+      summary: Get current match
+      description: |
+        Retrieve the current match for the authenticated user.
+
+        **Current match logic**:
+        - Returns matches with status "pending" (waiting for acceptance)
+        - Returns matches with status "accepted" IF they haven't expired yet
+        - Accepted matches expire 5 days after both users accept
+        - After expiration, accepted matches are no longer "current" and move to history
+        - Matches where both users have already submitted feedback are no longer considered "current"
+
+        **Returns**:
+        - Match details including the other user's information
+        - Match score and scheduled date/time
+        - Status ("pending" or "accepted")
+        - Availabilities submitted by both users
+
+        **Note**: Users can only have one current match at a time. After both users submit feedback,
+        the system automatically tries to generate a new match for each user.
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: Current pending match
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Match"
+        "204":
+          description: No pending match found (No Content)
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /api/matches/history:
+    get:
+      tags:
+        - User
+        - Matches
+      summary: Get match history
+      description: |
+        Retrieve complete match history for the authenticated user.
+
+        **Returns**:
+        - All matches (pending, accepted, rejected, expired)
+        - Chronological order (newest first)
+        - Full details of each match including other user's information
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: Match history
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  matches:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Match"
+                  count:
+                    type: integer
+                    example: 5
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /api/matches/{id}/accept:
+    patch:
+      tags:
+        - User
+        - Matches
+      summary: Accept a match with availability
+      description: |
+        Accept a pending match and provide your availability as the authenticated user.
+
+        **Two-step acceptance process**:
+        1. First user accepts with availability → Match remains "pending", availability is saved
+        2. Second user accepts with availability → Match status changes to "accepted", expires_at set to 5 days from now, both availabilities visible
+
+        **Match expiration**:
+        - Once both users accept, the match becomes "current" for 5 days
+        - After 5 days, the match is no longer returned by GET /api/matches/current
+        - The match remains visible in history with status "accepted"
+
+        **Availability format**:
+        - Keys: Date in format YYYY-MM-DD (e.g., "2025-02-18")
+        - Values: Array of time slots in HH:MM format (e.g., ["09:30", "10:30", "11:00"])
+
+        **Requirements**:
+        - Match must be in "pending" status
+        - User must be one of the participants in the match
+        - Availability object must be provided with at least one date and time slot
+      security:
+        - BearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+          description: Match ID to accept
+          example: 1
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - availability
+              properties:
+                availability:
+                  type: object
+                  additionalProperties:
+                    type: array
+                    items:
+                      type: string
+                  description: User's available time slots organized by date
+                  example:
+                    "2025-02-18": ["09:30", "10:30", "11:00"]
+                    "2025-02-19": ["14:00", "15:00"]
+                    "2025-02-20": ["10:00", "11:30", "16:00"]
+      responses:
+        "200":
+          description: Match accepted successfully with availability
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: Match accepted successfully
+                  match:
+                    $ref: "#/components/schemas/Match"
+        "400":
+          description: Bad request - invalid availability format
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "403":
+          description: Unauthorized to modify this match
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404":
+          description: Match not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /api/matches/{id}/reject:
+    patch:
+      tags:
+        - User
+        - Matches
+      summary: Reject a match
+      description: |
+        Reject a pending match as the authenticated user.
+
+        **Requirements**:
+        - Match must be in "pending" status
+        - User must be one of the participants in the match
+
+        **Result**:
+        - Match status changes to "rejected"
+        - Both users can be matched with others in future rounds
+        - 30-day cooldown still applies between these two users
+      security:
+        - BearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+          description: Match ID to reject
+          example: 1
+      responses:
+        "200":
+          description: Match rejected successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: Match rejected successfully
+        "400":
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "403":
+          description: Unauthorized to modify this match
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404":
+          description: Match not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /api/matches/{id}/availabilities:
+    get:
+      tags:
+        - User
+        - Matches
+      summary: Get availabilities for a match
+      description: |
+        Retrieve all availabilities submitted by both users for a specific match.
+
+        **Requirements**:
+        - User must be one of the participants in the match
+
+        **Returns**:
+        - List of availabilities (can be empty if no one has submitted yet)
+        - Each availability includes user info and their time slots
+      security:
+        - BearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+          description: Match ID
+          example: 1
+      responses:
+        "200":
+          description: Availabilities retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  availabilities:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/MatchAvailability"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "403":
+          description: Unauthorized to view this match
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404":
+          description: Match not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /api/matches/{id}/feedback:
+    post:
+      tags:
+        - User
+        - Matches
+      summary: Submit feedback for a match
+      description: |
+        Submit rating and optional comment for a completed match.
+
+        **Requirements**:
+        - Match must have status "accepted" (both users accepted)
+        - User must be one of the participants in the match
+        - User must not have already submitted feedback for this match
+
+        **Mandatory feedback**:
+        - Both users should provide feedback after accepting a match
+        - Use GET /api/matches/pending-feedback to see matches awaiting feedback
+
+        **Rating impact**:
+        - Rating updates the other user's averageRating field
+        - Average is calculated from all feedbacks received
+
+        **Automatic new match generation**:
+        - When both users have submitted feedback, the system automatically tries to generate new matches for both users
+        - If suitable candidates are found, new matches are created immediately
+        - If no suitable candidates are available, users simply won't have a current match (no error)
+        - Match generation is asynchronous and silent - it happens in the background
+      security:
+        - BearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+          description: Match ID
+          example: 1
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - rating
+              properties:
+                rating:
+                  type: integer
+                  description: Rating from 1 to 5 stars
+                  example: 4
+                  minimum: 1
+                  maximum: 5
+                comment:
+                  type: string
+                  description: Optional feedback comment
+                  example: "Great conversation about backend architecture!"
+      responses:
+        "201":
+          description: Feedback submitted successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: Feedback submitted successfully
+        "400":
+          description: Bad request - invalid rating or match not accepted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "403":
+          description: Unauthorized to provide feedback for this match
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404":
+          description: Match not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "409":
+          description: Feedback already submitted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /api/matches/{id}/feedbacks:
+    get:
+      tags:
+        - User
+        - Matches
+      summary: Get feedbacks for a match
+      description: |
+        Retrieve all feedbacks submitted for a specific match.
+
+        **Requirements**:
+        - User must be one of the participants in the match
+
+        **Returns**:
+        - List of feedbacks (can contain 0, 1, or 2 feedbacks)
+        - Each feedback includes rating, comment, and user info
+      security:
+        - BearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+          description: Match ID
+          example: 1
+      responses:
+        "200":
+          description: Feedbacks retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  feedbacks:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/MatchFeedback"
+                  count:
+                    type: integer
+                    example: 2
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "403":
+          description: Unauthorized to view feedbacks for this match
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404":
+          description: Match not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /api/matches/pending-feedback:
+    get:
+      tags:
+        - User
+        - Matches
+      summary: Get matches pending feedback
+      description: |
+        Retrieve all accepted matches that the user hasn't provided feedback for yet.
+
+        **Use case**:
+        - Display a reminder to users to submit feedback
+        - Track which matches need feedback
+
+        **Returns**:
+        - List of matches awaiting feedback
+        - Only includes accepted matches (both users accepted)
+        - Only includes matches where user hasn't submitted feedback
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: Pending feedback matches retrieved
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  matches:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Match"
+                  count:
+                    type: integer
+                    example: 1
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /api/admin/matches/generate:
+    post:
+      tags:
+        - Admin
+        - Matches
+      summary: Generate matches for organisation
+      description: |
+        Manually generate matches for all eligible users in the admin's organisation.
+
+        **Note**: This endpoint generates matches only for the admin's organisation.
+        For generating matches across all organisations, use `/api/admin/matches/trigger-scheduler`.
+
+        **Eligibility criteria**:
+        - User must be confirmed
+        - User must not have a pending match
+        - User must not have been matched with the same person in the last 30 days
+
+        **Matching algorithm**:
+        - Calculates match score based on tag similarity (Jaccard index)
+        - Selects best non-conflicting pairs (each user appears max once)
+        - Creates matches with random dates/times (weekdays, business hours)
+        - Sends email notifications to both users
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: Matches generated successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: Matches generated successfully
+                  count:
+                    type: integer
+                    example: 10
+        "400":
+          description: Bad request or not enough users to match
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "403":
+          description: Forbidden - Admin access required
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /api/admin/matches/trigger-scheduler:
+    post:
+      tags:
+        - Admin
+        - Matches
+      summary: Trigger match scheduler manually
+      description: |
+        Manually trigger the automatic match scheduler to generate matches for **all organisations** immediately.
+
+        **Difference from `/api/admin/matches/generate`**:
+        - This endpoint processes **all organisations** in the system
+        - `/generate` only processes the admin's organisation
+
+        **Scheduler behavior**:
+        - Runs asynchronously in background
+        - Iterates through all organisations
+        - Generates matches for each organisation independently
+        - Logs detailed information about the process
+
+        **Normal schedule**: The scheduler runs automatically every Monday at 9:00 AM.
+        This endpoint allows manual triggering for testing or emergency updates.
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: Scheduler triggered successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: Scheduler triggered successfully - matches will be generated for all organisations
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "403":
+          description: Forbidden - Admin access required
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "500":
+          description: Internal server error - Scheduler not initialized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /api/admin/matches:
+    get:
+      tags:
+        - Admin
+        - Matches
+      summary: Get all matches for organisation
+      description: |
+        Retrieve all matches for the admin's organisation with detailed information.
+
+        **Returns**:
+        - List of all matches (pending, accepted, rejected, expired)
+        - User details for both participants
+        - Match scores and scheduled dates/times
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: List of matches
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  matches:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Match"
+                  count:
+                    type: integer
+                    example: 10
+        "400":
+          description: Bad request or admin not assigned to organisation
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "403":
+          description: Forbidden - Admin access required
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /api/admin/matches/{id}/feedbacks:
+    get:
+      tags:
+        - Admin
+        - Matches
+      summary: Get feedbacks for a match (Admin)
+      description: |
+        Retrieve all feedbacks for a specific match. Admin can view all feedbacks including comments.
+
+        **Admin capabilities**:
+        - View feedbacks for any match in their organisation
+        - See both rating and comment from each user
+        - Useful for monitoring match quality and user satisfaction
+      security:
+        - BearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+          description: Match ID
+          example: 1
+      responses:
+        "200":
+          description: Feedbacks retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  feedbacks:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/MatchFeedback"
+                  count:
+                    type: integer
+                    example: 2
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "403":
+          description: Forbidden - Admin access required
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "500":
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
 components:
   securitySchemes:
     BearerAuth:
@@ -722,6 +1517,14 @@ components:
         isConfirmed:
           type: boolean
           example: true
+        averageRating:
+          type: number
+          format: float
+          description: Average rating received from other users (1-5 scale)
+          example: 4.25
+          minimum: 1
+          maximum: 5
+          nullable: true
         createdAt:
           type: string
           format: date-time
@@ -768,15 +1571,21 @@ components:
 
     Tag:
       type: object
+      description: |
+        User tag for categorization and matching.
+        Tags are used to calculate match compatibility scores.
+        Multiple users can share the same tag (many-to-many relationship).
       properties:
         id:
           type: integer
           example: 1
         name:
           type: string
+          description: Tag name (e.g., "developer", "designer", "manager")
           example: developer
         organisationId:
           type: integer
+          description: Organisation that owns this tag
           example: 1
         createdAt:
           type: string
@@ -786,6 +1595,189 @@ components:
           type: string
           format: date-time
           example: "2025-12-15T10:00:00Z"
+
+    Match:
+      type: object
+      description: |
+        Represents a match between two users in the same organisation.
+        Matches are generated automatically every Monday at 9 AM or manually by admins.
+      properties:
+        id:
+          type: integer
+          example: 1
+        organisationId:
+          type: integer
+          example: 1
+        user1Id:
+          type: integer
+          example: 10
+        user2Id:
+          type: integer
+          example: 15
+        user1:
+          $ref: "#/components/schemas/User"
+          description: First user in the match
+        user2:
+          $ref: "#/components/schemas/User"
+          description: Second user in the match
+        matchScore:
+          type: number
+          format: float
+          description: |
+            Match compatibility score (0-100) calculated using Jaccard similarity on user tags.
+            Formula: (common tags / total unique tags) * 100
+          example: 75.5
+          minimum: 0
+          maximum: 100
+        user1Accepted:
+          type: boolean
+          description: Whether user1 has accepted the match
+          example: false
+        user2Accepted:
+          type: boolean
+          description: Whether user2 has accepted the match
+          example: false
+        user1AcceptedAt:
+          type: string
+          format: date-time
+          description: Timestamp when user1 accepted the match
+          example: "2025-12-16T10:30:00Z"
+          nullable: true
+        user2AcceptedAt:
+          type: string
+          format: date-time
+          description: Timestamp when user2 accepted the match
+          example: "2025-12-16T11:15:00Z"
+          nullable: true
+        expiresAt:
+          type: string
+          format: date-time
+          description: |
+            Expiration timestamp for accepted matches.
+            Set to 5 days after both users accept the match.
+            After this time, the match is no longer considered "current".
+          example: "2025-12-21T11:15:00Z"
+          nullable: true
+        availabilities:
+          type: array
+          items:
+            $ref: "#/components/schemas/MatchAvailability"
+          description: |
+            Availabilities submitted by both users (if any).
+            Array can contain 0, 1, or 2 items depending on how many users have submitted their availability.
+        feedbacks:
+          type: array
+          items:
+            $ref: "#/components/schemas/MatchFeedback"
+          description: |
+            Feedbacks submitted by both users (if any).
+            Array can contain 0, 1, or 2 items depending on how many users have submitted feedback.
+            Visible in match history and for admins.
+        status:
+          type: string
+          enum: [pending, accepted, rejected, expired]
+          description: |
+            Match status:
+            - pending: Match created, waiting for user action (or one user accepted, waiting for the other)
+            - accepted: Both users accepted the match
+            - rejected: At least one user rejected the match
+            - expired: Match expired (no action taken)
+          example: pending
+        scheduledDate:
+          type: string
+          format: date-time
+          description: Suggested date for the meeting (random weekday, 1-5 days ahead)
+          example: "2025-12-18T00:00:00Z"
+        scheduledTime:
+          type: string
+          description: Suggested time slot for the meeting (random, between 9 AM - 5 PM)
+          example: "2 PM"
+        createdAt:
+          type: string
+          format: date-time
+          example: "2025-12-15T10:00:00Z"
+        updatedAt:
+          type: string
+          format: date-time
+          example: "2025-12-15T10:00:00Z"
+
+    MatchAvailability:
+      type: object
+      description: |
+        Represents a user's availability for a specific match.
+        Each user provides their available time slots when accepting a match.
+      properties:
+        id:
+          type: integer
+          example: 1
+        matchId:
+          type: integer
+          example: 5
+        userId:
+          type: integer
+          example: 10
+        user:
+          $ref: "#/components/schemas/User"
+          description: User who provided this availability
+        availability:
+          type: object
+          additionalProperties:
+            type: array
+            items:
+              type: string
+          description: |
+            Available time slots organized by date.
+            - Keys: Date in YYYY-MM-DD format
+            - Values: Array of time slots in HH:MM format (24-hour)
+          example:
+            "2025-02-18": ["09:30", "10:30", "11:00"]
+            "2025-02-19": ["14:00", "15:00"]
+            "2025-02-20": ["10:00", "11:30", "16:00"]
+        createdAt:
+          type: string
+          format: date-time
+          example: "2025-12-16T10:30:00Z"
+        updatedAt:
+          type: string
+          format: date-time
+          example: "2025-12-16T10:30:00Z"
+
+    MatchFeedback:
+      type: object
+      description: |
+        Represents feedback submitted by a user for a completed match.
+        Both users must submit feedback after the match expires (mandatory).
+      properties:
+        id:
+          type: integer
+          example: 1
+        matchId:
+          type: integer
+          example: 5
+        userId:
+          type: integer
+          example: 10
+        user:
+          $ref: "#/components/schemas/User"
+          description: User who submitted this feedback
+        rating:
+          type: integer
+          description: Rating from 1 to 5 stars
+          example: 4
+          minimum: 1
+          maximum: 5
+        comment:
+          type: string
+          description: Optional feedback comment
+          example: "Great conversation about backend architecture!"
+        createdAt:
+          type: string
+          format: date-time
+          example: "2025-12-21T14:30:00Z"
+        updatedAt:
+          type: string
+          format: date-time
+          example: "2025-12-21T14:30:00Z"
 
     Error:
       type: object

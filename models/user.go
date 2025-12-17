@@ -23,6 +23,7 @@ type User struct {
 	Organisation   *Organisation  `gorm:"foreignKey:OrganisationID" json:"organisation,omitempty"`
 	Tags           []Tag          `gorm:"many2many:user_tags;" json:"tags,omitempty"`
 	IsConfirmed    bool           `gorm:"default:false" json:"isConfirmed"`
+	AverageRating  *float64       `gorm:"type:decimal(3,2)" json:"averageRating,omitempty"`
 	RefreshToken   *string        `gorm:"type:text" json:"-"`
 	CreatedAt      time.Time      `json:"createdAt"`
 	UpdatedAt      time.Time      `json:"updatedAt"`

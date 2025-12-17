@@ -11,6 +11,7 @@ import (
 	"virtual-cuppa-be/handlers"
 	"virtual-cuppa-be/middleware"
 	"virtual-cuppa-be/repositories"
+	"virtual-cuppa-be/scheduler"
 	"virtual-cuppa-be/services"
 )
 
@@ -24,13 +25,24 @@ func main() {
 	userRepo := repositories.NewUserRepository(config.DB)
 	orgRepo := repositories.NewOrganisationRepository(config.DB)
 	tagRepo := repositories.NewTagRepository(config.DB)
+	matchRepo := repositories.NewMatchRepository(config.DB)
+	matchHistoryRepo := repositories.NewMatchHistoryRepository(config.DB)
+	matchFeedbackRepo := repositories.NewMatchFeedbackRepository(config.DB)
 	emailService := services.NewEmailService()
 	authService := services.NewAuthService(userRepo, emailService)
 	userService := services.NewUserService(userRepo, orgRepo, tagRepo, emailService)
 	orgService := services.NewOrganisationService(orgRepo)
+	matchService := services.NewMatchService(matchRepo, matchHistoryRepo, matchFeedbackRepo, userRepo, emailService)
 	authHandler := handlers.NewAuthHandler(authService)
 	userHandler := handlers.NewUserHandler(userService)
 	orgHandler := handlers.NewOrganisationHandler(orgService, userService)
+
+	// Start match scheduler
+	matchScheduler := scheduler.NewMatchScheduler(matchService, orgRepo)
+	matchScheduler.Start()
+
+	matchHandler := handlers.NewMatchHandler(matchService, matchScheduler)
+	feedbackHandler := handlers.NewMatchFeedbackHandler(matchService)
 
 	router := gin.Default()
 
@@ -68,6 +80,18 @@ func main() {
 	{
 		api.GET("/profile", authHandler.GetProfile)
 		api.GET("/organisation", orgHandler.GetOrganisation)
+		
+		// Match endpoints for all authenticated users
+		api.GET("/matches/current", matchHandler.GetCurrentMatch)
+		api.GET("/matches/history", matchHandler.GetMatchHistory)
+		api.PATCH("/matches/:id/accept", matchHandler.AcceptMatch)
+		api.PATCH("/matches/:id/reject", matchHandler.RejectMatch)
+		api.GET("/matches/:id/availabilities", matchHandler.GetMatchAvailabilities)
+		
+		// Feedback endpoints
+		api.POST("/matches/:id/feedback", feedbackHandler.SubmitFeedback)
+		api.GET("/matches/:id/feedbacks", feedbackHandler.GetMatchFeedbacks)
+		api.GET("/matches/pending-feedback", feedbackHandler.GetPendingFeedback)
 
 		admin := api.Group("/admin")
 		admin.Use(middleware.AdminRequired())
@@ -85,6 +109,12 @@ func main() {
 		admin.PATCH("/users/:userId/tags", userHandler.UpdateTags)
 		admin.GET("/organisation", orgHandler.GetOrganisation)
 		admin.PUT("/organisation", orgHandler.UpsertOrganisation)
+		
+		// Match endpoints for admins
+		admin.POST("/matches/generate", matchHandler.GenerateMatches)
+		admin.POST("/matches/trigger-scheduler", matchHandler.TriggerScheduler)
+		admin.GET("/matches", matchHandler.GetOrganisationMatches)
+		admin.GET("/matches/:id/feedbacks", feedbackHandler.AdminGetMatchFeedbacks)
 		}
 	}
 

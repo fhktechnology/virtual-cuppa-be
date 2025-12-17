@@ -9,6 +9,7 @@ import (
 type OrganisationRepository interface {
 	FindByID(id uint) (*models.Organisation, error)
 	FindByName(name string) (*models.Organisation, error)
+	FindAll() ([]*models.Organisation, error)
 	Create(organisation *models.Organisation) error
 	Update(organisation *models.Organisation) error
 	Upsert(organisation *models.Organisation) error
@@ -40,6 +41,12 @@ func (r *organisationRepository) FindByName(name string) (*models.Organisation, 
 		return nil, err
 	}
 	return &organisation, nil
+}
+
+func (r *organisationRepository) FindAll() ([]*models.Organisation, error) {
+	var organisations []*models.Organisation
+	err := r.db.Find(&organisations).Error
+	return organisations, err
 }
 
 func (r *organisationRepository) Create(organisation *models.Organisation) error {

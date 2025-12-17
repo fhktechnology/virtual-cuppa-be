@@ -11,19 +11,22 @@ import (
 type EmailService interface {
 	SendConfirmCode(toEmail string, toName string, confirmCode string) error
 	SendInvitation(toEmail string, toName string, organisationName string) error
+	SendMatchNotification(toEmail string, toName string, matchName string, date string, time string, matchScore string) error
 }
 
 type emailService struct {
-	apiKey                string
-	confirmCodeTemplateID string
-	invitationTemplateID  string
+	apiKey                     string
+	confirmCodeTemplateID      string
+	invitationTemplateID       string
+	matchNotificationTemplateID string
 }
 
 func NewEmailService() EmailService {
 	return &emailService{
-		apiKey:                os.Getenv("SENDGRID_API_KEY"),
-		confirmCodeTemplateID: os.Getenv("CONFIRM_CODE_TEMPLATE_ID"),
-		invitationTemplateID:  os.Getenv("INVITATION_TEMPLATE_ID"),
+		apiKey:                     os.Getenv("SENDGRID_API_KEY"),
+		confirmCodeTemplateID:      os.Getenv("CONFIRM_CODE_TEMPLATE_ID"),
+		invitationTemplateID:       os.Getenv("INVITATION_TEMPLATE_ID"),
+		matchNotificationTemplateID: os.Getenv("MATCH_NOTIFICATION_TEMPLATE_ID"),
 	}
 }
 
@@ -87,6 +90,42 @@ func (s *emailService) SendInvitation(toEmail string, toName string, organisatio
 	if response.StatusCode >= 400 {
 		return fmt.Errorf("sendgrid error for invitation to %s: status code %d, body: %s", toEmail, response.StatusCode, response.Body)
 	}
+	
+	return nil
+}
+
+func (s *emailService) SendMatchNotification(toEmail string, toName string, matchName string, date string, time string, matchScore string) error {
+	// TODO: Uncomment when SendGrid template is ready
+	// if s.apiKey == "" || s.matchNotificationTemplateID == "" {
+	// 	return fmt.Errorf("sendgrid not configured for match notifications: API_KEY=%v, TEMPLATE_ID=%v", s.apiKey != "", s.matchNotificationTemplateID != "")
+	// }
+	
+	// from := mail.NewEmail("Virtual Cuppa", "noreply@notacv.com")
+	// to := mail.NewEmail(toName, toEmail)
+	
+	// message := mail.NewV3Mail()
+	// message.SetFrom(from)
+	// message.SetTemplateID(s.matchNotificationTemplateID)
+	
+	// personalization := mail.NewPersonalization()
+	// personalization.AddTos(to)
+	// personalization.SetDynamicTemplateData("MatchName", matchName)
+	// personalization.SetDynamicTemplateData("Date", date)
+	// personalization.SetDynamicTemplateData("Time", time)
+	// personalization.SetDynamicTemplateData("MatchScore", matchScore)
+	
+	// message.AddPersonalizations(personalization)
+	
+	// client := sendgrid.NewSendClient(s.apiKey)
+	// response, err := client.Send(message)
+	
+	// if err != nil {
+	// 	return fmt.Errorf("failed to send match notification to %s: %w", toEmail, err)
+	// }
+	
+	// if response.StatusCode >= 400 {
+	// 	return fmt.Errorf("sendgrid error for match notification to %s: status code %d, body: %s", toEmail, response.StatusCode, response.Body)
+	// }
 	
 	return nil
 }
