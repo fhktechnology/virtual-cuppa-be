@@ -4,6 +4,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 	"github.com/joho/godotenv"
@@ -47,11 +48,39 @@ func main() {
 
 	router := gin.Default()
 
+	allowedOriginsEnv := os.Getenv("CORS_ALLOWED_ORIGINS")
+	if allowedOriginsEnv == "" {
+		allowedOriginsEnv = "https://virtual-cappa.vercel.app"
+	}
+	allowedOrigins := make(map[string]struct{})
+	for _, origin := range strings.Split(allowedOriginsEnv, ",") {
+		origin = strings.TrimSpace(origin)
+		if origin != "" {
+			allowedOrigins[origin] = struct{}{}
+		}
+	}
+	allowCredentials := strings.EqualFold(os.Getenv("CORS_ALLOW_CREDENTIALS"), "true")
+
 	router.Use(func(c *gin.Context) {
-		c.Writer.Header().Set("Access-Control-Allow-Origin", "*")
-		c.Writer.Header().Set("Access-Control-Allow-Credentials", "true")
-		c.Writer.Header().Set("Access-Control-Allow-Headers", "Content-Type, Content-Length, Accept-Encoding, X-CSRF-Token, Authorization, accept, origin, Cache-Control, X-Requested-With")
+		origin := c.Request.Header.Get("Origin")
+		if origin != "" {
+			if _, ok := allowedOrigins[origin]; ok {
+				c.Writer.Header().Set("Access-Control-Allow-Origin", origin)
+				c.Writer.Header().Set("Vary", "Origin")
+				if allowCredentials {
+					c.Writer.Header().Set("Access-Control-Allow-Credentials", "true")
+				}
+			}
+		}
+
 		c.Writer.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS, GET, PUT, DELETE, PATCH")
+
+		// Echo requested headers for preflight (more reliable than hardcoding)
+		if acrh := c.Request.Header.Get("Access-Control-Request-Headers"); acrh != "" {
+			c.Writer.Header().Set("Access-Control-Allow-Headers", acrh)
+		} else {
+			c.Writer.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
+		}
 
 		if c.Request.Method == "OPTIONS" {
 			c.AbortWithStatus(204)
