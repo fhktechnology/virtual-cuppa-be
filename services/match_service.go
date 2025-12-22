@@ -204,32 +204,6 @@ func (s *matchService) GenerateMatchesForOrganisation(organisationID uint) (int,
 		}
 		s.matchHistoryRepo.Create(history)
 
-		// Send emails to both users
-		user1, _ := s.userRepo.FindByID(pair.user1ID)
-		user2, _ := s.userRepo.FindByID(pair.user2ID)
-
-		if user1 != nil && user2 != nil {
-			// Send to user1
-			s.emailSvc.SendMatchNotification(
-				user1.Email,
-				fmt.Sprintf("%s %s", user1.FirstName, user1.LastName),
-				fmt.Sprintf("%s %s", user2.FirstName, user2.LastName),
-				scheduledDate.Format("2 Jan"),
-				scheduledTime,
-				fmt.Sprintf("%.0f%%", pair.score),
-			)
-
-			// Send to user2
-			s.emailSvc.SendMatchNotification(
-				user2.Email,
-				fmt.Sprintf("%s %s", user2.FirstName, user2.LastName),
-				fmt.Sprintf("%s %s", user1.FirstName, user1.LastName),
-				scheduledDate.Format("2 Jan"),
-				scheduledTime,
-				fmt.Sprintf("%.0f%%", pair.score),
-			)
-		}
-
 		createdCount++
 	}
 
@@ -333,25 +307,6 @@ func (s *matchService) TryGenerateMatchForUser(userID uint) error {
 		MatchedAt: time.Now(),
 	}
 	s.matchHistoryRepo.Create(history)
-
-	// Send emails to both users
-	s.emailSvc.SendMatchNotification(
-		user.Email,
-		fmt.Sprintf("%s %s", user.FirstName, user.LastName),
-		fmt.Sprintf("%s %s", bestCandidate.FirstName, bestCandidate.LastName),
-		scheduledDate.Format("2 Jan"),
-		scheduledTime,
-		fmt.Sprintf("%.0f%%", bestScore),
-	)
-
-	s.emailSvc.SendMatchNotification(
-		bestCandidate.Email,
-		fmt.Sprintf("%s %s", bestCandidate.FirstName, bestCandidate.LastName),
-		fmt.Sprintf("%s %s", user.FirstName, user.LastName),
-		scheduledDate.Format("2 Jan"),
-		scheduledTime,
-		fmt.Sprintf("%.0f%%", bestScore),
-	)
 
 	return nil
 }
@@ -478,7 +433,59 @@ func (s *matchService) AcceptMatchWithAvailability(userID uint, matchID uint, av
 		return nil, err
 	}
 
+	// Send email notification to the OTHER user when current user accepts
+	// The other user gets notified about the current user's availability
+	var otherUser *models.User
+	var currentUserName string
+	
+	if updatedMatch.User1ID == userID {
+		otherUser = updatedMatch.User2
+		currentUserName = fmt.Sprintf("%s %s", updatedMatch.User1.FirstName, updatedMatch.User1.LastName)
+	} else {
+		otherUser = updatedMatch.User1
+		currentUserName = fmt.Sprintf("%s %s", updatedMatch.User2.FirstName, updatedMatch.User2.LastName)
+	}
+
+	// Format the current user's availability as HTML
+	if otherUser != nil {
+		availabilityHTML := s.formatSingleUserAvailabilityHTML(currentUserName, availability)
+		
+		s.emailSvc.SendMatchAccepted(
+			otherUser.Email,
+			fmt.Sprintf("%s %s", otherUser.FirstName, otherUser.LastName),
+			currentUserName,
+			availabilityHTML,
+		)
+	}
+
 	return updatedMatch, nil
+}
+
+// formatSingleUserAvailabilityHTML formats a single user's availability as HTML for email
+func (s *matchService) formatSingleUserAvailabilityHTML(userName string, availability models.Availability) string {
+	html := fmt.Sprintf("<div style='margin-bottom: 15px;'><strong>%s:</strong><ul style='margin: 5px 0;'>", userName)
+	
+	for dateStr, times := range availability {
+		// Try to parse the date and format it nicely
+		formattedDate := dateStr
+		if parsedDate, err := time.Parse("2006-01-02", dateStr); err == nil {
+			formattedDate = parsedDate.Format("2 Jan 2006")
+		} else if parsedDate, err := time.Parse(time.RFC3339, dateStr); err == nil {
+			formattedDate = parsedDate.Format("2 Jan 2006")
+		}
+		
+		html += fmt.Sprintf("<li>%s: ", formattedDate)
+		for i, timeSlot := range times {
+			if i > 0 {
+				html += ", "
+			}
+			html += timeSlot
+		}
+		html += "</li>"
+	}
+	html += "</ul></div>"
+	
+	return html
 }
 
 func (s *matchService) GetMatchAvailabilities(userID uint, matchID uint) ([]*models.MatchAvailability, error) {
