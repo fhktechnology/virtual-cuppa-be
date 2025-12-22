@@ -3,6 +3,7 @@ package main
 import (
 	"log"
 	"net/http"
+	"os"
 
 	"github.com/gin-gonic/gin"
 	"github.com/joho/godotenv"
@@ -118,6 +119,12 @@ func main() {
 		}
 	}
 
-	log.Println("Server starting on :8080")
-	router.Run(":8080")
+	port := os.Getenv("PORT")
+	if port == "" {
+		port = "8080"
+	}
+
+	addr := ":" + port
+	log.Println("Server starting on " + addr)
+	router.Run(addr)
 }
