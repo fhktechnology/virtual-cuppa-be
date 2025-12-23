@@ -34,6 +34,7 @@ func main() {
 	matchService := services.NewMatchService(matchRepo, matchHistoryRepo, matchFeedbackRepo, userRepo, emailService)
 	authService := services.NewAuthService(userRepo, emailService, matchService)
 	userService := services.NewUserService(userRepo, orgRepo, tagRepo, emailService)
+	orgService := services.NewOrganisationService(orgRepo)
 	authHandler := handlers.NewAuthHandler(authService)
 	userHandler := handlers.NewUserHandler(userService)
 	orgHandler := handlers.NewOrganisationHandler(orgService, userService)
