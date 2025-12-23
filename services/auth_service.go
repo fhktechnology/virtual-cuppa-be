@@ -27,12 +27,14 @@ type AuthService interface {
 type authService struct {
 	userRepo     repositories.UserRepository
 	emailService EmailService
+	matchService MatchService
 }
 
-func NewAuthService(userRepo repositories.UserRepository, emailService EmailService) AuthService {
+func NewAuthService(userRepo repositories.UserRepository, emailService EmailService, matchService MatchService) AuthService {
 	return &authService{
 		userRepo:     userRepo,
 		emailService: emailService,
+		matchService: matchService,
 	}
 }
 
@@ -125,7 +127,8 @@ func (s *authService) Login(input *models.LoginInput) (*models.AuthResponse, err
 	cache.Delete(input.Email)
 
 	// If user is not confirmed yet (first login), confirm them
-	if !user.IsConfirmed {
+	wasUnconfirmed := !user.IsConfirmed
+	if wasUnconfirmed {
 		user.IsConfirmed = true
 	}
 
@@ -142,6 +145,11 @@ func (s *authService) Login(input *models.LoginInput) (*models.AuthResponse, err
 	user.RefreshToken = &refreshToken
 	if err := s.userRepo.Update(user); err != nil {
 		return nil, err
+	}
+
+	// If user just became confirmed, try to generate a match for them
+	if wasUnconfirmed && s.matchService != nil {
+		go s.matchService.TryGenerateMatchForUser(user.ID)
 	}
 
 	return &models.AuthResponse{
