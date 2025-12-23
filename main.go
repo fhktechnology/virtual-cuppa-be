@@ -50,7 +50,7 @@ func main() {
 
 	allowedOriginsEnv := os.Getenv("CORS_ALLOWED_ORIGINS")
 	if allowedOriginsEnv == "" {
-		allowedOriginsEnv = "https://virtual-cappa.vercel.app"
+		allowedOriginsEnv = "https://virtual-cappa.vercel.app,http://localhost:3000"
 	}
 	allowedOrigins := make(map[string]struct{})
 	for _, origin := range strings.Split(allowedOriginsEnv, ",") {

@@ -465,21 +465,32 @@ func (s *matchService) AcceptMatchWithAvailability(userID uint, matchID uint, av
 func (s *matchService) formatSingleUserAvailabilityHTML(userName string, availability models.Availability) string {
 	html := fmt.Sprintf("<div style='margin-bottom: 15px;'><strong>%s:</strong><ul style='margin: 5px 0;'>", userName)
 	
-	for dateStr, times := range availability {
-		// Try to parse the date and format it nicely
-		formattedDate := dateStr
-		if parsedDate, err := time.Parse("2006-01-02", dateStr); err == nil {
-			formattedDate = parsedDate.Format("2 Jan 2006")
-		} else if parsedDate, err := time.Parse(time.RFC3339, dateStr); err == nil {
-			formattedDate = parsedDate.Format("2 Jan 2006")
+	// Define weekday order for consistent display
+	weekdayOrder := []string{"Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"}
+	
+	// Map English periods to Polish for email
+	periodNames := map[string]string{
+		"morning":   "przed południem",
+		"afternoon": "po południu",
+	}
+	
+	for _, weekday := range weekdayOrder {
+		periods, exists := availability[weekday]
+		if !exists || len(periods) == 0 {
+			continue
 		}
 		
-		html += fmt.Sprintf("<li>%s: ", formattedDate)
-		for i, timeSlot := range times {
+		html += fmt.Sprintf("<li>%s: ", weekday)
+		for i, period := range periods {
 			if i > 0 {
 				html += ", "
 			}
-			html += timeSlot
+			// Use Polish translation if available, otherwise use original
+			if polishName, ok := periodNames[period]; ok {
+				html += polishName
+			} else {
+				html += period
+			}
 		}
 		html += "</li>"
 	}

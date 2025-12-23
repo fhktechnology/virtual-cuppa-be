@@ -17,8 +17,10 @@ const (
 	MatchStatusExpired  MatchStatus = "expired"
 )
 
-// Availability represents user's available time slots
-// Format: {"2025-02-18": ["09:30", "10:30"], "2025-02-19": ["14:00"]}
+// Availability represents user's available time slots by weekday
+// Format: {"Monday": ["morning", "afternoon"], "Tuesday": ["afternoon"], "Wednesday": ["morning"]}
+// Valid days: Monday, Tuesday, Wednesday, Thursday, Friday, Saturday, Sunday
+// Valid periods: "morning" (przed południem), "afternoon" (po południu)
 type Availability map[string][]string
 
 // Scan implements sql.Scanner interface
