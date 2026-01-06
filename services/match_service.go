@@ -444,9 +444,9 @@ func (s *matchService) AcceptMatchWithAvailability(userID uint, matchID uint, av
 		match.User2AcceptedAt = &now
 	}
 
-	// If both users accepted, change status to accepted and set expiration (5 days from now)
+	// If both users accepted, change status to waiting_for_feedback and set expiration (5 days from now)
 	if match.User1Accepted && match.User2Accepted {
-		match.Status = models.MatchStatusAccepted
+		match.Status = models.MatchStatusWaitingForFeedback
 		expiresAt := now.AddDate(0, 0, 5) // 5 days from now
 		match.ExpiresAt = &expiresAt
 	}
@@ -598,8 +598,8 @@ func (s *matchService) SubmitFeedback(userID uint, matchID uint, rating int, com
 		return ErrUnauthorizedMatch
 	}
 
-	// Check if match is accepted (both users accepted)
-	if match.Status != models.MatchStatusAccepted {
+	// Check if match is waiting for feedback (both users accepted)
+	if match.Status != models.MatchStatusWaitingForFeedback {
 		return ErrMatchNotAccepted
 	}
 
@@ -640,7 +640,14 @@ func (s *matchService) SubmitFeedback(userID uint, matchID uint, rating int, com
 	// Check if both users have now submitted feedback
 	feedbackCount, err := s.matchFeedbackRepo.CountFeedbacksByMatch(matchID)
 	if err == nil && feedbackCount >= 2 {
-		// Both users gave feedback, try to generate new matches for both
+		// Both users gave feedback, mark match as completed
+		match.Status = models.MatchStatusCompleted
+		if updateErr := s.matchRepo.Update(match); updateErr != nil {
+			// Log error but don't fail the feedback submission
+			fmt.Printf("Warning: Failed to update match status to completed: %v\n", updateErr)
+		}
+		
+		// Try to generate new matches for both users
 		// These operations are fire-and-forget - errors are ignored
 		go s.TryGenerateMatchForUser(match.User1ID)
 		go s.TryGenerateMatchForUser(match.User2ID)
@@ -719,8 +726,8 @@ func (s *matchService) GetMatchesPendingFeedback(userID uint) ([]*models.Match, 
 	var pendingFeedback []*models.Match
 
 	for _, match := range matches {
-		// Only accepted matches (both users accepted)
-		if match.Status != models.MatchStatusAccepted {
+		// Only waiting_for_feedback matches (both users accepted, waiting for feedback)
+		if match.Status != models.MatchStatusWaitingForFeedback {
 			continue
 		}
 

@@ -1,7 +1,6 @@
 package repositories
 
 import (
-	"time"
 	"virtual-cuppa-be/models"
 
 	"gorm.io/gorm"
@@ -47,15 +46,13 @@ func (r *matchRepository) FindByID(id uint) (*models.Match, error) {
 
 func (r *matchRepository) FindCurrentByUserID(userID uint) (*models.Match, error) {
 	var match models.Match
-	now := time.Now()
 	err := r.db.Preload("User1.Tags").Preload("User2.Tags").
 		Preload("User1.AvailabilityConfig").Preload("User2.AvailabilityConfig").
 		Preload("Availabilities").
 		Preload("Feedbacks.User").
 		Where(`(user1_id = ? OR user2_id = ?) AND 
-		       (status = ? OR 
-		        (status = ? AND (expires_at IS NULL OR expires_at > ?)))`, 
-			userID, userID, models.MatchStatusPending, models.MatchStatusAccepted, now).
+		       (status = ? OR status = ?)`, 
+			userID, userID, models.MatchStatusPending, models.MatchStatusWaitingForFeedback).
 		Order("created_at DESC").
 		First(&match).Error
 	if err != nil {

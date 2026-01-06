@@ -11,10 +11,12 @@ import (
 type MatchStatus string
 
 const (
-	MatchStatusPending  MatchStatus = "pending"
-	MatchStatusAccepted MatchStatus = "accepted"
-	MatchStatusRejected MatchStatus = "rejected"
-	MatchStatusExpired  MatchStatus = "expired"
+	MatchStatusPending           MatchStatus = "pending"
+	MatchStatusAccepted          MatchStatus = "accepted"
+	MatchStatusRejected          MatchStatus = "rejected"
+	MatchStatusExpired           MatchStatus = "expired"
+	MatchStatusWaitingForFeedback MatchStatus = "waiting_for_feedback"
+	MatchStatusCompleted         MatchStatus = "completed"
 )
 
 // Availability represents user's available time slots by weekday

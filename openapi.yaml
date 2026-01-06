@@ -972,10 +972,9 @@ paths:
 
         **Current match logic**:
         - Returns matches with status "pending" (waiting for acceptance)
-        - Returns matches with status "accepted" IF they haven't expired yet
-        - Accepted matches expire 5 days after both users accept
-        - After expiration, accepted matches are no longer "current" and move to history
-        - Matches where both users have already submitted feedback are no longer considered "current"
+        - Returns matches with status "waiting_for_feedback" (both users accepted, waiting for feedback)
+        - Does not return matches after both users have submitted feedback (completed)
+        - Matches expire 5 days after both users accept (expires_at), but remain "current" until feedback is submitted
 
         **Returns**:
         - Match details including both users' information
@@ -1052,12 +1051,12 @@ paths:
 
         **Two-step acceptance process**:
         1. First user accepts → Match remains "pending"
-        2. Second user accepts → Match status changes to "accepted", expires_at set to 5 days from now
+        2. Second user accepts → Match status changes to "waiting_for_feedback", expires_at set to 5 days from now
 
         **Match expiration**:
-        - Once both users accept, the match becomes "current" for 5 days
-        - After 5 days, the match is no longer returned by GET /api/matches/current
-        - The match remains visible in history with status "accepted"
+        - Once both users accept, the match becomes "waiting_for_feedback"
+        - Users have 5 days to submit feedback
+        - After 5 days, the match expires but remains visible in history
         - Email notification is sent to both users
 
         **Availability information**:
@@ -1844,13 +1843,15 @@ components:
             Visible in match history and for admins.
         status:
           type: string
-          enum: [pending, accepted, rejected, expired]
+          enum: [pending, accepted, rejected, expired, waiting_for_feedback, completed]
           description: |
             Match status:
             - pending: Match created, waiting for user action (or one user accepted, waiting for the other)
-            - accepted: Both users accepted the match
+            - accepted: DEPRECATED - not used anymore (both users now go directly to waiting_for_feedback)
             - rejected: At least one user rejected the match
             - expired: Match expired (no action taken)
+            - waiting_for_feedback: Both users accepted the match, waiting for feedback (expires 5 days after acceptance)
+            - completed: Both users submitted feedback
           example: pending
         scheduledDate:
           type: string
