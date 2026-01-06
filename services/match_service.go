@@ -39,6 +39,7 @@ type matchService struct {
 	matchHistoryRepo  repositories.MatchHistoryRepository
 	matchFeedbackRepo repositories.MatchFeedbackRepository
 	userRepo          repositories.UserRepository
+	availConfigRepo   repositories.UserAvailabilityConfigRepository
 	emailSvc          EmailService
 }
 
@@ -47,6 +48,7 @@ func NewMatchService(
 	matchHistoryRepo repositories.MatchHistoryRepository,
 	matchFeedbackRepo repositories.MatchFeedbackRepository,
 	userRepo repositories.UserRepository,
+	availConfigRepo repositories.UserAvailabilityConfigRepository,
 	emailSvc EmailService,
 ) MatchService {
 	return &matchService{
@@ -54,6 +56,7 @@ func NewMatchService(
 		matchHistoryRepo:  matchHistoryRepo,
 		matchFeedbackRepo: matchFeedbackRepo,
 		userRepo:          userRepo,
+		availConfigRepo:   availConfigRepo,
 		emailSvc:          emailSvc,
 	}
 }
@@ -104,7 +107,10 @@ func (s *matchService) GenerateMatchesForOrganisation(organisationID uint) (int,
 	}
 
 	// Filter only confirmed users without pending matches (exclude Admins)
+	// Also check if users have availability configuration
 	var availableUsers []*models.User
+	var userConfigs = make(map[uint]*models.UserAvailabilityConfig)
+	
 	for _, user := range users {
 		// Skip admins - they should not be matched
 		if user.AccountType == models.AccountTypeAdmin {
@@ -120,6 +126,18 @@ func (s *matchService) GenerateMatchesForOrganisation(organisationID uint) (int,
 		if hasPending {
 			continue
 		}
+		
+		// Check if user has availability configuration
+		config, err := s.availConfigRepo.FindByUserID(user.ID)
+		if err != nil {
+			return 0, err
+		}
+		if config == nil {
+			// User doesn't have availability config, skip
+			continue
+		}
+		
+		userConfigs[user.ID] = config
 		availableUsers = append(availableUsers, user)
 	}
 
@@ -140,6 +158,14 @@ func (s *matchService) GenerateMatchesForOrganisation(organisationID uint) (int,
 				return 0, err
 			}
 			if wasRecent {
+				continue
+			}
+			
+			// Check if users have common availability
+			config1 := userConfigs[user1.ID]
+			config2 := userConfigs[user2.ID]
+			if !models.HasCommonAvailability(config1, config2) {
+				// No common time slots, skip this pair
 				continue
 			}
 
@@ -236,6 +262,15 @@ func (s *matchService) TryGenerateMatchForUser(userID uint) error {
 	if hasPending {
 		return nil // User already has a pending match
 	}
+	
+	// Check if user has availability configuration
+	userConfig, err := s.availConfigRepo.FindByUserID(userID)
+	if err != nil {
+		return nil
+	}
+	if userConfig == nil {
+		return nil // User doesn't have availability config
+	}
 
 	// Get all confirmed users in the same organisation
 	users, err := s.userRepo.FindByOrganisation(*user.OrganisationID)
@@ -245,6 +280,8 @@ func (s *matchService) TryGenerateMatchForUser(userID uint) error {
 
 	// Find available users (excluding the current user, admins, unconfirmed, and those with pending matches)
 	var candidates []*models.User
+	var candidateConfigs = make(map[uint]*models.UserAvailabilityConfig)
+	
 	for _, u := range users {
 		if u.ID == userID || u.AccountType == models.AccountTypeAdmin || !u.IsConfirmed {
 			continue
@@ -259,7 +296,19 @@ func (s *matchService) TryGenerateMatchForUser(userID uint) error {
 		if err != nil || wasRecent {
 			continue
 		}
-
+		
+		// Check if candidate has availability configuration
+		candidateConfig, err := s.availConfigRepo.FindByUserID(u.ID)
+		if err != nil || candidateConfig == nil {
+			continue
+		}
+		
+		// Check if they have common availability
+		if !models.HasCommonAvailability(userConfig, candidateConfig) {
+			continue
+		}
+		
+		candidateConfigs[u.ID] = candidateConfig
 		candidates = append(candidates, u)
 	}
 

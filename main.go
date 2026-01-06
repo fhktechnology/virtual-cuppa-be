@@ -30,14 +30,17 @@ func main() {
 	matchRepo := repositories.NewMatchRepository(config.DB)
 	matchHistoryRepo := repositories.NewMatchHistoryRepository(config.DB)
 	matchFeedbackRepo := repositories.NewMatchFeedbackRepository(config.DB)
+	userAvailConfigRepo := repositories.NewUserAvailabilityConfigRepository(config.DB)
 	emailService := services.NewEmailService()
-	matchService := services.NewMatchService(matchRepo, matchHistoryRepo, matchFeedbackRepo, userRepo, emailService)
+	matchService := services.NewMatchService(matchRepo, matchHistoryRepo, matchFeedbackRepo, userRepo, userAvailConfigRepo, emailService)
 	authService := services.NewAuthService(userRepo, emailService, matchService)
 	userService := services.NewUserService(userRepo, orgRepo, tagRepo, emailService)
 	orgService := services.NewOrganisationService(orgRepo)
+	userAvailConfigService := services.NewUserAvailabilityConfigService(userAvailConfigRepo, userRepo)
 	authHandler := handlers.NewAuthHandler(authService)
 	userHandler := handlers.NewUserHandler(userService)
 	orgHandler := handlers.NewOrganisationHandler(orgService, userService)
+	userAvailConfigHandler := handlers.NewUserAvailabilityConfigHandler(userAvailConfigService, matchService)
 
 	// Start match scheduler
 	matchScheduler := scheduler.NewMatchScheduler(matchService, orgRepo)
@@ -110,6 +113,13 @@ func main() {
 	{
 		api.GET("/profile", authHandler.GetProfile)
 		api.GET("/organisation", orgHandler.GetOrganisation)
+		
+		// Availability configuration endpoints
+		api.POST("/availability-config", userAvailConfigHandler.CreateConfig)
+		api.GET("/availability-config", userAvailConfigHandler.GetConfig)
+		api.PUT("/availability-config", userAvailConfigHandler.UpdateConfig)
+		api.DELETE("/availability-config", userAvailConfigHandler.DeleteConfig)
+		api.GET("/availability-config/check", userAvailConfigHandler.HasConfig)
 		
 		// Match endpoints for all authenticated users
 		api.GET("/matches/current", matchHandler.GetCurrentMatch)

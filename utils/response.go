@@ -47,6 +47,12 @@ func HandleServiceError(c *gin.Context, err error) {
 		RespondWithError(c, http.StatusBadRequest, err.Error())
 	case "user does not belong to admin's organisation":
 		RespondWithError(c, http.StatusForbidden, err.Error())
+	case "availability configuration not found":
+		RespondWithError(c, http.StatusNotFound, err.Error())
+	case "availability configuration already exists for this user":
+		RespondWithError(c, http.StatusConflict, err.Error())
+	case "at least one availability slot must be selected":
+		RespondWithError(c, http.StatusBadRequest, err.Error())
 	default:
 		log.Printf("Unhandled service error: %v", err)
 		if strings.Contains(err.Error(), "sendgrid") {

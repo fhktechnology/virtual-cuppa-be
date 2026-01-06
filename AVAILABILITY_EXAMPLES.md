@@ -1,5 +1,24 @@
 # Match Availability Feature - Przykłady użycia
 
+## Format dostępności
+
+**Nowy format availability:**
+
+Dostępność jest teraz określana przez **dni tygodnia** i **pory dnia** zamiast konkretnych dat:
+
+- **Dni tygodnia**: `Monday`, `Tuesday`, `Wednesday`, `Thursday`, `Friday`, `Saturday`, `Sunday`
+- **Pory dnia**: `morning` (przed południem), `afternoon` (po południu)
+
+**Przykład:**
+
+```json
+{
+  "Monday": ["morning", "afternoon"],
+  "Wednesday": ["afternoon"],
+  "Friday": ["morning"]
+}
+```
+
 ## Flow akceptacji matcha z dostępnością
 
 ### Automatyczne zwracanie availabilities
@@ -25,9 +44,9 @@ curl -X PATCH http://localhost:8080/api/matches/1/accept \
   -H "Content-Type: application/json" \
   -d '{
     "availability": {
-      "2025-02-18": ["09:30", "10:30", "11:00"],
-      "2025-02-19": ["14:00", "15:00"],
-      "2025-02-20": ["10:00", "11:30", "16:00"]
+      "Monday": ["morning", "afternoon"],
+      "Wednesday": ["afternoon"],
+      "Friday": ["morning"]
     }
   }'
 ```
@@ -52,9 +71,9 @@ curl -X PATCH http://localhost:8080/api/matches/1/accept \
         "matchId": 1,
         "userId": 10,
         "availability": {
-          "2025-02-18": ["09:30", "10:30", "11:00"],
-          "2025-02-19": ["14:00", "15:00"],
-          "2025-02-20": ["10:00", "11:30", "16:00"]
+          "Monday": ["morning", "afternoon"],
+          "Wednesday": ["afternoon"],
+          "Friday": ["morning"]
         }
       }
     ]
@@ -70,9 +89,9 @@ curl -X PATCH http://localhost:8080/api/matches/1/accept \
   -H "Content-Type: application/json" \
   -d '{
     "availability": {
-      "2025-02-18": ["10:30", "11:00"],
-      "2025-02-19": ["09:00", "14:00"],
-      "2025-02-21": ["15:00", "16:00"]
+      "Monday": ["afternoon"],
+      "Tuesday": ["morning"],
+      "Friday": ["morning", "afternoon"]
     }
   }'
 ```
@@ -91,15 +110,16 @@ curl -X PATCH http://localhost:8080/api/matches/1/accept \
     "user1AcceptedAt": "2025-02-16T10:30:00Z",
     "user2AcceptedAt": "2025-02-16T11:15:00Z",
     "status": "accepted",
+    "expiresAt": "2025-02-21T11:15:00Z",
     "availabilities": [
       {
         "id": 1,
         "matchId": 1,
         "userId": 10,
         "availability": {
-          "2025-02-18": ["09:30", "10:30", "11:00"],
-          "2025-02-19": ["14:00", "15:00"],
-          "2025-02-20": ["10:00", "11:30", "16:00"]
+          "Monday": ["morning", "afternoon"],
+          "Wednesday": ["afternoon"],
+          "Friday": ["morning"]
         }
       },
       {
@@ -107,9 +127,9 @@ curl -X PATCH http://localhost:8080/api/matches/1/accept \
         "matchId": 1,
         "userId": 15,
         "availability": {
-          "2025-02-18": ["10:30", "11:00"],
-          "2025-02-19": ["09:00", "14:00"],
-          "2025-02-21": ["15:00", "16:00"]
+          "Monday": ["afternoon"],
+          "Tuesday": ["morning"],
+          "Friday": ["morning", "afternoon"]
         }
       }
     ]
@@ -140,9 +160,9 @@ curl -X GET http://localhost:8080/api/matches/1/availabilities \
         "email": "john@example.com"
       },
       "availability": {
-        "2025-02-18": ["09:30", "10:30", "11:00"],
-        "2025-02-19": ["14:00", "15:00"],
-        "2025-02-20": ["10:00", "11:30", "16:00"]
+        "Monday": ["morning", "afternoon"],
+        "Wednesday": ["afternoon"],
+        "Friday": ["morning"]
       },
       "createdAt": "2025-02-16T10:30:00Z",
       "updatedAt": "2025-02-16T10:30:00Z"
@@ -158,9 +178,9 @@ curl -X GET http://localhost:8080/api/matches/1/availabilities \
         "email": "jane@example.com"
       },
       "availability": {
-        "2025-02-18": ["10:30", "11:00"],
-        "2025-02-19": ["09:00", "14:00"],
-        "2025-02-21": ["15:00", "16:00"]
+        "Monday": ["afternoon"],
+        "Tuesday": ["morning"],
+        "Friday": ["morning", "afternoon"]
       },
       "createdAt": "2025-02-16T11:15:00Z",
       "updatedAt": "2025-02-16T11:15:00Z"
@@ -176,25 +196,26 @@ curl -X GET http://localhost:8080/api/matches/1/availabilities \
 ```json
 {
   "availability": {
-    "YYYY-MM-DD": ["HH:MM", "HH:MM", ...],
-    "YYYY-MM-DD": ["HH:MM", "HH:MM", ...]
+    "Monday": ["morning", "afternoon"],
+    "Tuesday": ["afternoon"],
+    "Friday": ["morning"]
   }
 }
 ```
 
-**Klucze (daty):**
+**Klucze (dni tygodnia):**
 
-- Format: `YYYY-MM-DD` (ISO 8601)
-- Przykład: `"2025-02-18"`
-- Ułatwia parsowanie na frontendzie
-- Sortowanie chronologiczne działa automatycznie
+- Format: nazwa dnia po angielsku
+- Dozwolone wartości: `Monday`, `Tuesday`, `Wednesday`, `Thursday`, `Friday`, `Saturday`, `Sunday`
+- Przykład: `"Monday"`, `"Friday"`
+- Nie zależy od konkretnych dat w kalendarzu
 
-**Wartości (godziny):**
+**Wartości (pory dnia):**
 
-- Format: `HH:MM` (24-godzinny)
-- Przykład: `"09:30"`, `"14:00"`, `"16:30"`
-- Łatwe do wyświetlenia i konwersji na frontend
-- Możliwość łatwego formatowania (np. `"09:30"` → `"9:30 AM"`)
+- Format: string
+- Dozwolone wartości: `"morning"` (przed południem), `"afternoon"` (po południu)
+- Przykład: `["morning"]`, `["morning", "afternoon"]`
+- Prosty wybór dla użytkownika
 
 ## Przykłady użycia na frontendzie
 
@@ -202,7 +223,7 @@ curl -X GET http://localhost:8080/api/matches/1/availabilities \
 
 ```typescript
 interface Availability {
-  [date: string]: string[]; // {"2025-02-18": ["09:30", "10:30"]}
+  [weekday: string]: string[]; // {"Monday": ["morning", "afternoon"]}
 }
 
 interface MatchAcceptRequest {
@@ -225,8 +246,9 @@ const acceptMatch = async (matchId: number, availability: Availability) => {
 
 // Przykładowe dane
 const myAvailability: Availability = {
-  "2025-02-18": ["09:30", "10:30", "11:00"],
-  "2025-02-19": ["14:00", "15:00"],
+  Monday: ["morning", "afternoon"],
+  Wednesday: ["afternoon"],
+  Friday: ["morning"],
 };
 
 await acceptMatch(1, myAvailability);
@@ -240,6 +262,11 @@ const AvailabilityDisplay = ({
 }: {
   availabilities: MatchAvailability[];
 }) => {
+  const periodLabels = {
+    morning: "Przed południem",
+    afternoon: "Po południu",
+  };
+
   return (
     <div>
       {availabilities.map((avail) => (
@@ -247,12 +274,15 @@ const AvailabilityDisplay = ({
           <h3>
             {avail.user.firstName} {avail.user.lastName}
           </h3>
-          {Object.entries(avail.availability).map(([date, times]) => (
-            <div key={date}>
-              <strong>{new Date(date).toLocaleDateString()}</strong>
+          {Object.entries(avail.availability).map(([weekday, periods]) => (
+            <div key={weekday}>
+              <strong>{weekday}</strong>
               <ul>
-                {times.map((time) => (
-                  <li key={time}>{formatTime(time)}</li>
+                {periods.map((period) => (
+                  <li key={period}>
+                    {periodLabels[period as keyof typeof periodLabels] ||
+                      period}
+                  </li>
                 ))}
               </ul>
             </div>
@@ -262,34 +292,26 @@ const AvailabilityDisplay = ({
     </div>
   );
 };
-
-const formatTime = (time: string) => {
-  const [hours, minutes] = time.split(":");
-  const h = parseInt(hours);
-  const period = h >= 12 ? "PM" : "AM";
-  const displayHour = h > 12 ? h - 12 : h === 0 ? 12 : h;
-  return `${displayHour}:${minutes} ${period}`;
-};
 ```
 
 ## Walidacja
 
 Backend akceptuje dowolną strukturę JSONB, ale zalecane jest:
 
-1. **Daty w przyszłości**: Frontend powinien walidować, że daty są >= dzisiaj
-2. **Format czasu**: `HH:MM` w formacie 24-godzinnym
-3. **Minimalnie jedna data**: Przynajmniej jedna data z przynajmniej jednym słotem
-4. **Unikalność godzin**: Brak duplikatów w tablicy godzin dla danego dnia
+1. **Prawidłowe dni tygodnia**: Frontend powinien walidować, że klucze to: `Monday`, `Tuesday`, `Wednesday`, `Thursday`, `Friday`, `Saturday`, `Sunday`
+2. **Prawidłowe pory dnia**: Wartości to `"morning"` lub `"afternoon"`
+3. **Minimalnie jeden dzień**: Przynajmniej jeden dzień z przynajmniej jedną porą dnia
+4. **Unikalność**: Brak duplikatów w tablicy dla danego dnia
 
 ## Możliwe rozszerzenia
 
 W przyszłości można dodać:
 
-1. **Algorytm znajdowania wspólnych slotów** - automatyczne sugestie
-2. **Finalizacja spotkania** - endpoint do wyboru konkretnej daty/godziny
-3. **Powiadomienia email** - gdy druga osoba doda swoją dostępność
+1. **Algorytm znajdowania wspólnych dni** - automatyczne sugestie wspólnych dni dostępności
+2. **Finalizacja spotkania** - endpoint do wyboru konkretnej daty/godziny ze wspólnych dni
+3. **Powiadomienia email** - gdy druga osoba doda swoją dostępność ✅ **Zaimplementowane**
 4. **Edycja dostępności** - możliwość zmiany po zaakceptowaniu
-5. **Strefy czasowe** - obsługa różnych stref czasowych
+5. **Dodatkowe pory dnia** - np. wieczór, rano wcześnie, późne popołudnie
 
 ## Struktury bazy danych
 

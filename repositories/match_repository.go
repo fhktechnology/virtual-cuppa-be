@@ -49,6 +49,7 @@ func (r *matchRepository) FindCurrentByUserID(userID uint) (*models.Match, error
 	var match models.Match
 	now := time.Now()
 	err := r.db.Preload("User1.Tags").Preload("User2.Tags").
+		Preload("User1.AvailabilityConfig").Preload("User2.AvailabilityConfig").
 		Preload("Availabilities").
 		Preload("Feedbacks.User").
 		Where(`(user1_id = ? OR user2_id = ?) AND 

@@ -15,9 +15,25 @@ info:
     ## Matching System
     The system automatically generates matches between users based on:
     - **Tag compatibility**: Jaccard similarity (common tags / total unique tags × 100)
-    - **User availability**: No pending matches
+    - **Availability configuration**: Both users must have availability configuration with at least one common time slot
+    - **User status**: No pending matches
     - **Cooldown period**: 30-day minimum between same users
     - **One match per user**: Each user can have only one pending match at a time
+
+    ### Availability Configuration (Required for Matching)
+    - Each user must create their **system-wide availability configuration**
+    - Configuration defines available days (Monday-Sunday) and periods (morning/afternoon)
+    - **Matching requirement**: Both users must have:
+      1. Created availability configuration
+      2. At least one common time slot (e.g., both available Tuesday afternoon)
+    - Users without configuration **will not be matched**
+
+    ### Match Generation Algorithm
+    1. Filter users: confirmed, no pending match, **has availability config**
+    2. For each pair: check recent match history (30 days) and **common availability**
+    3. Calculate compatibility score based on tags
+    4. Sort pairs by score (highest first)
+    5. Greedy selection: pick best matches ensuring each user appears once
 
     ### Match Acceptance Flow
     - **Two-step acceptance**: Both users must accept for the match to be fully accepted
@@ -27,12 +43,13 @@ info:
     - If either user rejects, status immediately changes to **rejected**
 
     ### Automatic Scheduler
-    - Runs every **Monday at 9:00 AM**
+    - Runs every **30 minutes**
     - Processes **all organisations** automatically
     - Can be manually triggered via `/api/admin/matches/trigger-scheduler`
+    - Additionally triggers when user confirms account or after both users submit feedback
 
     ## Email Notifications
-    The system uses SendGrid with three email templates:
+    The system uses SendGrid with four email templates:
 
     1. **CONFIRM_CODE_TEMPLATE_ID**: 6-digit confirmation code
        - Sent during registration
@@ -43,9 +60,9 @@ info:
        - Sent when admin creates a new user
        - Dynamic data: `OrganisationName`
 
-    3. **MATCH_NOTIFICATION_TEMPLATE_ID**: Match notification
-       - Sent to both users when a match is created
-       - Dynamic data: `MatchName` (other user's name), `Date`, `Time`, `MatchScore`
+    3. **MATCH_ACCEPTED_TEMPLATE_ID**: Match acceptance notification
+       - Sent to both users when both have accepted a match
+       - Dynamic data: `MatchName` (other user's name), `Availability` (formatted HTML with both users' time slots)
 
   version: 2.0.0
   contact:
@@ -60,6 +77,8 @@ tags:
     description: User authentication and registration endpoints
   - name: User
     description: User profile and match endpoints
+  - name: Availability
+    description: User availability configuration for matching
   - name: Admin
     description: Admin-only endpoints for user management, organisation settings, and match control
   - name: Matches
@@ -305,6 +324,178 @@ paths:
                 $ref: "#/components/schemas/Error"
         "404":
           description: User not assigned to any organisation or organisation not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /api/availability-config:
+    post:
+      tags:
+        - Availability
+      summary: Create availability configuration
+      description: |
+        Create system-wide availability configuration for the authenticated user.
+        This configuration defines when the user is available for matches.
+
+        **Required for matching**: Users without availability configuration will not be matched.
+
+        **Matching logic**: A match is created only when both users have availability configuration AND have at least one common time slot.
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateAvailabilityConfigInput"
+      responses:
+        "201":
+          description: Availability configuration created successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserAvailabilityConfig"
+        "400":
+          description: Bad request - at least one slot must be selected
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "409":
+          description: Configuration already exists
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+    get:
+      tags:
+        - Availability
+      summary: Get availability configuration
+      description: Get the availability configuration for the authenticated user
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: Availability configuration
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserAvailabilityConfig"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404":
+          description: Configuration not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+    put:
+      tags:
+        - Availability
+      summary: Update availability configuration
+      description: |
+        Update availability configuration for the authenticated user.
+        Only provided fields will be updated (partial update).
+        At least one time slot must remain selected after the update.
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateAvailabilityConfigInput"
+      responses:
+        "200":
+          description: Configuration updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserAvailabilityConfig"
+        "400":
+          description: Bad request - at least one slot must be selected
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404":
+          description: Configuration not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+    delete:
+      tags:
+        - Availability
+      summary: Delete availability configuration
+      description: Delete the availability configuration for the authenticated user. User will not be matched until a new configuration is created.
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: Configuration deleted successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: Availability configuration deleted successfully
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404":
+          description: Configuration not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /api/availability-config/check:
+    get:
+      tags:
+        - Availability
+      summary: Check if user has availability configuration
+      description: Check whether the authenticated user has created an availability configuration
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: Has configuration status
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  hasConfig:
+                    type: boolean
+                    example: true
+        "401":
+          description: Unauthorized
           content:
             application/json:
               schema:
@@ -787,10 +978,11 @@ paths:
         - Matches where both users have already submitted feedback are no longer considered "current"
 
         **Returns**:
-        - Match details including the other user's information
+        - Match details including both users' information
+        - **Both users' availability configurations** (availabilityConfig) showing common time slots
         - Match score and scheduled date/time
         - Status ("pending" or "accepted")
-        - Availabilities submitted by both users
+        - User tags
 
         **Note**: Users can only have one current match at a time. After both users submit feedback,
         the system automatically tries to generate a new match for each user.
@@ -854,27 +1046,28 @@ paths:
       tags:
         - User
         - Matches
-      summary: Accept a match with availability
+      summary: Accept a match
       description: |
-        Accept a pending match and provide your availability as the authenticated user.
+        Accept a pending match as the authenticated user.
 
         **Two-step acceptance process**:
-        1. First user accepts with availability → Match remains "pending", availability is saved
-        2. Second user accepts with availability → Match status changes to "accepted", expires_at set to 5 days from now, both availabilities visible
+        1. First user accepts → Match remains "pending"
+        2. Second user accepts → Match status changes to "accepted", expires_at set to 5 days from now
 
         **Match expiration**:
         - Once both users accept, the match becomes "current" for 5 days
         - After 5 days, the match is no longer returned by GET /api/matches/current
         - The match remains visible in history with status "accepted"
+        - Email notification is sent to both users
 
-        **Availability format**:
-        - Keys: Date in format YYYY-MM-DD (e.g., "2025-02-18")
-        - Values: Array of time slots in HH:MM format (e.g., ["09:30", "10:30", "11:00"])
+        **Availability information**:
+        - Both users' system-wide availability configurations are included in the match response
+        - No need to provide availability when accepting - it's already configured in user profiles
+        - Match was created only because both users have common availability time slots
 
         **Requirements**:
         - Match must be in "pending" status
         - User must be one of the participants in the match
-        - Availability object must be provided with at least one date and time slot
       security:
         - BearerAuth: []
       parameters:
@@ -885,29 +1078,9 @@ paths:
             type: integer
           description: Match ID to accept
           example: 1
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required:
-                - availability
-              properties:
-                availability:
-                  type: object
-                  additionalProperties:
-                    type: array
-                    items:
-                      type: string
-                  description: User's available time slots organized by date
-                  example:
-                    "2025-02-18": ["09:30", "10:30", "11:00"]
-                    "2025-02-19": ["14:00", "15:00"]
-                    "2025-02-20": ["10:00", "11:30", "16:00"]
       responses:
         "200":
-          description: Match accepted successfully with availability
+          description: Match accepted successfully
           content:
             application/json:
               schema:
@@ -916,14 +1089,6 @@ paths:
                   message:
                     type: string
                     example: Match accepted successfully
-                  match:
-                    $ref: "#/components/schemas/Match"
-        "400":
-          description: Bad request - invalid availability format
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Error"
         "401":
           description: Unauthorized
           content:
@@ -1336,8 +1501,8 @@ paths:
         - Generates matches for each organisation independently
         - Logs detailed information about the process
 
-        **Normal schedule**: The scheduler runs automatically every Monday at 9:00 AM.
-        This endpoint allows manual triggering for testing or emergency updates.
+        **Normal schedule**: The scheduler runs automatically every 30 minutes.
+        This endpoint allows manual triggering for testing or immediate match generation.
       security:
         - BearerAuth: []
       responses:
@@ -1524,6 +1689,10 @@ components:
           example: 4.25
           minimum: 1
           maximum: 5
+          nullable: true
+        availabilityConfig:
+          $ref: "#/components/schemas/UserAvailabilityConfig"
+          description: User's system-wide availability configuration (null if not set)
           nullable: true
         createdAt:
           type: string
@@ -1726,13 +1895,13 @@ components:
             items:
               type: string
           description: |
-            Available time slots organized by date.
-            - Keys: Date in YYYY-MM-DD format
-            - Values: Array of time slots in HH:MM format (24-hour)
+            Available time slots organized by weekday.
+            - Keys: Weekday name (Monday, Tuesday, Wednesday, Thursday, Friday, Saturday, Sunday)
+            - Values: Array of time periods ("morning" for przed południem, "afternoon" for po południu)
           example:
-            "2025-02-18": ["09:30", "10:30", "11:00"]
-            "2025-02-19": ["14:00", "15:00"]
-            "2025-02-20": ["10:00", "11:30", "16:00"]
+            "Monday": ["morning", "afternoon"]
+            "Wednesday": ["afternoon"]
+            "Friday": ["morning"]
         createdAt:
           type: string
           format: date-time
@@ -1778,6 +1947,187 @@ components:
           type: string
           format: date-time
           example: "2025-12-21T14:30:00Z"
+
+    UserAvailabilityConfig:
+      type: object
+      description: |
+        User's system-wide availability configuration.
+        Defines when the user is available for matches (days and time periods).
+        Required for the matching algorithm - users without configuration will not be matched.
+      properties:
+        id:
+          type: integer
+          example: 1
+        userId:
+          type: integer
+          example: 5
+        mondayMorning:
+          type: boolean
+          example: true
+        mondayAfternoon:
+          type: boolean
+          example: false
+        tuesdayMorning:
+          type: boolean
+          example: true
+        tuesdayAfternoon:
+          type: boolean
+          example: true
+        wednesdayMorning:
+          type: boolean
+          example: false
+        wednesdayAfternoon:
+          type: boolean
+          example: true
+        thursdayMorning:
+          type: boolean
+          example: false
+        thursdayAfternoon:
+          type: boolean
+          example: false
+        fridayMorning:
+          type: boolean
+          example: true
+        fridayAfternoon:
+          type: boolean
+          example: true
+        saturdayMorning:
+          type: boolean
+          example: false
+        saturdayAfternoon:
+          type: boolean
+          example: false
+        sundayMorning:
+          type: boolean
+          example: false
+        sundayAfternoon:
+          type: boolean
+          example: false
+        createdAt:
+          type: string
+          format: date-time
+          example: "2026-01-06T10:30:00Z"
+        updatedAt:
+          type: string
+          format: date-time
+          example: "2026-01-06T10:30:00Z"
+
+    CreateAvailabilityConfigInput:
+      type: object
+      description: |
+        Input for creating availability configuration.
+        At least one time slot must be set to true.
+      properties:
+        mondayMorning:
+          type: boolean
+          default: false
+        mondayAfternoon:
+          type: boolean
+          default: false
+        tuesdayMorning:
+          type: boolean
+          default: false
+        tuesdayAfternoon:
+          type: boolean
+          default: false
+        wednesdayMorning:
+          type: boolean
+          default: false
+        wednesdayAfternoon:
+          type: boolean
+          default: false
+        thursdayMorning:
+          type: boolean
+          default: false
+        thursdayAfternoon:
+          type: boolean
+          default: false
+        fridayMorning:
+          type: boolean
+          default: false
+        fridayAfternoon:
+          type: boolean
+          default: false
+        saturdayMorning:
+          type: boolean
+          default: false
+        saturdayAfternoon:
+          type: boolean
+          default: false
+        sundayMorning:
+          type: boolean
+          default: false
+        sundayAfternoon:
+          type: boolean
+          default: false
+      example:
+        mondayMorning: true
+        mondayAfternoon: false
+        tuesdayMorning: true
+        tuesdayAfternoon: true
+        wednesdayMorning: false
+        wednesdayAfternoon: true
+        thursdayMorning: false
+        thursdayAfternoon: false
+        fridayMorning: true
+        fridayAfternoon: true
+        saturdayMorning: false
+        saturdayAfternoon: false
+        sundayMorning: false
+        sundayAfternoon: false
+
+    UpdateAvailabilityConfigInput:
+      type: object
+      description: |
+        Input for updating availability configuration.
+        Only provided fields will be updated (partial update).
+        At least one time slot must remain true after the update.
+      properties:
+        mondayMorning:
+          type: boolean
+          nullable: true
+        mondayAfternoon:
+          type: boolean
+          nullable: true
+        tuesdayMorning:
+          type: boolean
+          nullable: true
+        tuesdayAfternoon:
+          type: boolean
+          nullable: true
+        wednesdayMorning:
+          type: boolean
+          nullable: true
+        wednesdayAfternoon:
+          type: boolean
+          nullable: true
+        thursdayMorning:
+          type: boolean
+          nullable: true
+        thursdayAfternoon:
+          type: boolean
+          nullable: true
+        fridayMorning:
+          type: boolean
+          nullable: true
+        fridayAfternoon:
+          type: boolean
+          nullable: true
+        saturdayMorning:
+          type: boolean
+          nullable: true
+        saturdayAfternoon:
+          type: boolean
+          nullable: true
+        sundayMorning:
+          type: boolean
+          nullable: true
+        sundayAfternoon:
+          type: boolean
+          nullable: true
+      example:
+        mondayMorning: false
+        tuesdayAfternoon: true
 
     Error:
       type: object

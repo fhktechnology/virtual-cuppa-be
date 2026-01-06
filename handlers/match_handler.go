@@ -4,7 +4,6 @@ import (
 	"net/http"
 	"strconv"
 
-	"virtual-cuppa-be/models"
 	"virtual-cuppa-be/scheduler"
 	"virtual-cuppa-be/services"
 	"virtual-cuppa-be/utils"
@@ -65,7 +64,7 @@ func (h *MatchHandler) GetMatchHistory(c *gin.Context) {
 	})
 }
 
-// AcceptMatch accepts a pending match with availability
+// AcceptMatch accepts a pending match
 func (h *MatchHandler) AcceptMatch(c *gin.Context) {
 	userID, exists := c.Get("userID")
 	if !exists {
@@ -80,16 +79,7 @@ func (h *MatchHandler) AcceptMatch(c *gin.Context) {
 		return
 	}
 
-	var req struct {
-		Availability models.Availability `json:"availability" binding:"required"`
-	}
-
-	if err := c.ShouldBindJSON(&req); err != nil {
-		utils.RespondWithError(c, http.StatusBadRequest, "Invalid request body. Expected format: {\"availability\": {\"2025-02-18\": [\"09:30\", \"10:30\"]}}")
-		return
-	}
-
-	match, err := h.matchService.AcceptMatchWithAvailability(userID.(uint), uint(matchID), req.Availability)
+	err = h.matchService.AcceptMatch(userID.(uint), uint(matchID))
 	if err != nil {
 		if err == services.ErrMatchNotFound {
 			utils.RespondWithError(c, http.StatusNotFound, "Match not found")
@@ -105,7 +95,6 @@ func (h *MatchHandler) AcceptMatch(c *gin.Context) {
 
 	utils.RespondWithSuccess(c, http.StatusOK, gin.H{
 		"message": "Match accepted successfully",
-		"match":   match,
 	})
 }
 
