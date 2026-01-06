@@ -81,6 +81,83 @@ func (uac *UserAvailabilityConfig) GetAvailableSlots() []string {
 	return slots
 }
 
+// ToAvailability converts UserAvailabilityConfig to Availability map format
+func (uac *UserAvailabilityConfig) ToAvailability() Availability {
+	availability := make(Availability)
+	
+	if uac.MondayMorning || uac.MondayAfternoon {
+		availability["Monday"] = []string{}
+		if uac.MondayMorning {
+			availability["Monday"] = append(availability["Monday"], "morning")
+		}
+		if uac.MondayAfternoon {
+			availability["Monday"] = append(availability["Monday"], "afternoon")
+		}
+	}
+	
+	if uac.TuesdayMorning || uac.TuesdayAfternoon {
+		availability["Tuesday"] = []string{}
+		if uac.TuesdayMorning {
+			availability["Tuesday"] = append(availability["Tuesday"], "morning")
+		}
+		if uac.TuesdayAfternoon {
+			availability["Tuesday"] = append(availability["Tuesday"], "afternoon")
+		}
+	}
+	
+	if uac.WednesdayMorning || uac.WednesdayAfternoon {
+		availability["Wednesday"] = []string{}
+		if uac.WednesdayMorning {
+			availability["Wednesday"] = append(availability["Wednesday"], "morning")
+		}
+		if uac.WednesdayAfternoon {
+			availability["Wednesday"] = append(availability["Wednesday"], "afternoon")
+		}
+	}
+	
+	if uac.ThursdayMorning || uac.ThursdayAfternoon {
+		availability["Thursday"] = []string{}
+		if uac.ThursdayMorning {
+			availability["Thursday"] = append(availability["Thursday"], "morning")
+		}
+		if uac.ThursdayAfternoon {
+			availability["Thursday"] = append(availability["Thursday"], "afternoon")
+		}
+	}
+	
+	if uac.FridayMorning || uac.FridayAfternoon {
+		availability["Friday"] = []string{}
+		if uac.FridayMorning {
+			availability["Friday"] = append(availability["Friday"], "morning")
+		}
+		if uac.FridayAfternoon {
+			availability["Friday"] = append(availability["Friday"], "afternoon")
+		}
+	}
+	
+	if uac.SaturdayMorning || uac.SaturdayAfternoon {
+		availability["Saturday"] = []string{}
+		if uac.SaturdayMorning {
+			availability["Saturday"] = append(availability["Saturday"], "morning")
+		}
+		if uac.SaturdayAfternoon {
+			availability["Saturday"] = append(availability["Saturday"], "afternoon")
+		}
+	}
+	
+	if uac.SundayMorning || uac.SundayAfternoon {
+		availability["Sunday"] = []string{}
+		if uac.SundayMorning {
+			availability["Sunday"] = append(availability["Sunday"], "morning")
+		}
+		if uac.SundayAfternoon {
+			availability["Sunday"] = append(availability["Sunday"], "afternoon")
+		}
+	}
+	
+	return availability
+}
+
 // HasCommonAvailability checks if two users have at least one common available time slot
 func HasCommonAvailability(config1, config2 *UserAvailabilityConfig) bool {
 	return (config1.MondayMorning && config2.MondayMorning) ||

@@ -432,7 +432,47 @@ func (s *matchService) AcceptMatch(userID uint, matchID uint) error {
 		match.ExpiresAt = &expiresAt
 	}
 
-	return s.matchRepo.Update(match)
+	if err := s.matchRepo.Update(match); err != nil {
+		return err
+	}
+
+	// Send email notification to the OTHER user when current user accepts
+	// Reload match with user details for email
+	updatedMatch, err := s.matchRepo.FindByID(matchID)
+	if err == nil && updatedMatch != nil {
+		var otherUser *models.User
+		var currentUser *models.User
+		
+		if updatedMatch.User1ID == userID {
+			otherUser = updatedMatch.User2
+			currentUser = updatedMatch.User1
+		} else {
+			otherUser = updatedMatch.User1
+			currentUser = updatedMatch.User2
+		}
+
+		if otherUser != nil && currentUser != nil {
+			// Get current user's availability config
+			availConfig, err := s.availConfigRepo.FindByUserID(currentUser.ID)
+			if err == nil && availConfig != nil {
+				// Convert availability config to Availability map format
+				availability := availConfig.ToAvailability()
+				availabilitySlots := s.formatAvailabilitySlots(availability)
+				
+				currentUserName := fmt.Sprintf("%s %s", currentUser.FirstName, currentUser.LastName)
+				otherUserName := fmt.Sprintf("%s %s", otherUser.FirstName, otherUser.LastName)
+				
+				s.emailSvc.SendMatchAccepted(
+					otherUser.Email,
+					otherUserName,
+					currentUserName,
+					availabilitySlots,
+				)
+			}
+		}
+	}
+
+	return nil
 }
 
 func (s *matchService) AcceptMatchWithAvailability(userID uint, matchID uint, availability models.Availability) (*models.Match, error) {
