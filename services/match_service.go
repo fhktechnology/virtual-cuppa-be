@@ -19,6 +19,12 @@ var (
 	ErrInvalidRating         = errors.New("rating must be between 1 and 5")
 )
 
+// AvailabilitySlot represents a single availability time slot for email templates
+type AvailabilitySlot struct {
+	Day    string `json:"day"`
+	Period string `json:"period"`
+}
+
 type MatchService interface {
 	GenerateMatchesForOrganisation(organisationID uint) (int, error)
 	TryGenerateMatchForUser(userID uint) error
@@ -501,25 +507,25 @@ func (s *matchService) AcceptMatchWithAvailability(userID uint, matchID uint, av
 		currentUserName = fmt.Sprintf("%s %s", updatedMatch.User2.FirstName, updatedMatch.User2.LastName)
 	}
 
-	// Format the current user's availability as HTML
+	// Format the current user's availability as structured data for SendGrid
 	if otherUser != nil {
-		availabilityHTML := s.formatSingleUserAvailabilityHTML(currentUserName, availability)
+		availabilitySlots := s.formatAvailabilitySlots(availability)
 		
 		s.emailSvc.SendMatchAccepted(
 			otherUser.Email,
 			fmt.Sprintf("%s %s", otherUser.FirstName, otherUser.LastName),
 			currentUserName,
-			availabilityHTML,
+			availabilitySlots,
 		)
 	}
 
 	return updatedMatch, nil
 }
 
-// formatSingleUserAvailabilityHTML formats a single user's availability as simple HTML for email
-func (s *matchService) formatSingleUserAvailabilityHTML(userName string, availability models.Availability) string {
+// formatAvailabilitySlots converts availability map to structured array for SendGrid template
+func (s *matchService) formatAvailabilitySlots(availability models.Availability) []AvailabilitySlot {
 	if len(availability) == 0 {
-		return "No availability provided"
+		return []AvailabilitySlot{}
 	}
 	
 	// Define weekday order for consistent display
@@ -531,8 +537,7 @@ func (s *matchService) formatSingleUserAvailabilityHTML(userName string, availab
 		"afternoon": "Afternoon",
 	}
 	
-	var result string
-	firstEntry := true
+	var slots []AvailabilitySlot
 	
 	for _, weekday := range weekdayOrder {
 		periods, exists := availability[weekday]
@@ -540,31 +545,20 @@ func (s *matchService) formatSingleUserAvailabilityHTML(userName string, availab
 			continue
 		}
 		
-		if !firstEntry {
-			result += "<br/>"
-		}
-		firstEntry = false
-		
-		result += fmt.Sprintf("• <strong>%s</strong>: ", weekday)
-		
-		for i, period := range periods {
-			if i > 0 {
-				result += ", "
+		for _, period := range periods {
+			periodName := periodNames[period]
+			if periodName == "" {
+				periodName = period
 			}
-			// Use readable name if available, otherwise use original
-			if readableName, ok := periodNames[period]; ok {
-				result += readableName
-			} else {
-				result += period
-			}
+			
+			slots = append(slots, AvailabilitySlot{
+				Day:    weekday,
+				Period: periodName,
+			})
 		}
 	}
 	
-	if result == "" {
-		return "No availability provided"
-	}
-	
-	return result
+	return slots
 }
 
 func (s *matchService) GetMatchAvailabilities(userID uint, matchID uint) ([]*models.MatchAvailability, error) {

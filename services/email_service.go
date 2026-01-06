@@ -11,7 +11,7 @@ import (
 type EmailService interface {
 	SendConfirmCode(toEmail string, toName string, confirmCode string) error
 	SendInvitation(toEmail string, toName string, organisationName string) error
-	SendMatchAccepted(toEmail string, toName string, matchName string, availability string) error
+	SendMatchAccepted(toEmail string, toName string, matchName string, availabilitySlots []AvailabilitySlot) error
 }
 
 type emailService struct {
@@ -94,7 +94,7 @@ func (s *emailService) SendInvitation(toEmail string, toName string, organisatio
 	return nil
 }
 
-func (s *emailService) SendMatchAccepted(toEmail string, toName string, matchName string, availability string) error {
+func (s *emailService) SendMatchAccepted(toEmail string, toName string, matchName string, availabilitySlots []AvailabilitySlot) error {
 	if s.apiKey == "" || s.matchAcceptedTemplateID == "" {
 		return fmt.Errorf("sendgrid not configured for match accepted notifications: API_KEY=%v, TEMPLATE_ID=%v", s.apiKey != "", s.matchAcceptedTemplateID != "")
 	}
@@ -109,7 +109,7 @@ func (s *emailService) SendMatchAccepted(toEmail string, toName string, matchNam
 	personalization := mail.NewPersonalization()
 	personalization.AddTos(to)
 	personalization.SetDynamicTemplateData("MatchName", matchName)
-	personalization.SetDynamicTemplateData("Availability", availability)
+	personalization.SetDynamicTemplateData("AvailabilitySlots", availabilitySlots)
 	
 	message.AddPersonalizations(personalization)
 	
