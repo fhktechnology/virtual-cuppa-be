@@ -459,15 +459,24 @@ func (s *matchService) AcceptMatch(userID uint, matchID uint) error {
 				availability := availConfig.ToAvailability()
 				availabilitySlots := s.formatAvailabilitySlots(availability)
 				
+				// If no slots, don't send email (config exists but all slots are false)
+				if len(availabilitySlots) == 0 {
+					fmt.Printf("WARNING: User %d has availability config but no slots enabled\n", currentUser.ID)
+					return nil
+				}
+				
 				currentUserName := fmt.Sprintf("%s %s", currentUser.FirstName, currentUser.LastName)
 				otherUserName := fmt.Sprintf("%s %s", otherUser.FirstName, otherUser.LastName)
 				
-				s.emailSvc.SendMatchAccepted(
+				err = s.emailSvc.SendMatchAccepted(
 					otherUser.Email,
 					otherUserName,
 					currentUserName,
 					availabilitySlots,
 				)
+				if err != nil {
+					fmt.Printf("ERROR: Failed to send match accepted email: %v\n", err)
+				}
 			}
 		}
 	}
