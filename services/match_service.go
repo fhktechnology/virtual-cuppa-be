@@ -408,16 +408,22 @@ func (s *matchService) AcceptMatch(userID uint, matchID uint) error {
 		return ErrUnauthorizedMatch
 	}
 
-	// Mark the current user as accepted
+	now := time.Now()
+
+	// Mark the current user as accepted with timestamp
 	if match.User1ID == userID {
 		match.User1Accepted = true
+		match.User1AcceptedAt = &now
 	} else {
 		match.User2Accepted = true
+		match.User2AcceptedAt = &now
 	}
 
-	// If both users accepted, change status to accepted
+	// If both users accepted, change status to waiting_for_feedback and set expiration (5 days from now)
 	if match.User1Accepted && match.User2Accepted {
-		match.Status = models.MatchStatusAccepted
+		match.Status = models.MatchStatusWaitingForFeedback
+		expiresAt := now.AddDate(0, 0, 5) // 5 days from now
+		match.ExpiresAt = &expiresAt
 	}
 
 	return s.matchRepo.Update(match)
@@ -510,18 +516,23 @@ func (s *matchService) AcceptMatchWithAvailability(userID uint, matchID uint, av
 	return updatedMatch, nil
 }
 
-// formatSingleUserAvailabilityHTML formats a single user's availability as HTML for email
+// formatSingleUserAvailabilityHTML formats a single user's availability as simple HTML for email
 func (s *matchService) formatSingleUserAvailabilityHTML(userName string, availability models.Availability) string {
-	html := fmt.Sprintf("<div style='margin-bottom: 15px;'><strong>%s:</strong><ul style='margin: 5px 0;'>", userName)
+	if len(availability) == 0 {
+		return "No availability provided"
+	}
 	
 	// Define weekday order for consistent display
 	weekdayOrder := []string{"Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"}
 	
-	// Map English periods to Polish for email
+	// Map periods to readable names
 	periodNames := map[string]string{
-		"morning":   "przed południem",
-		"afternoon": "po południu",
+		"morning":   "Morning",
+		"afternoon": "Afternoon",
 	}
+	
+	var result string
+	firstEntry := true
 	
 	for _, weekday := range weekdayOrder {
 		periods, exists := availability[weekday]
@@ -529,23 +540,31 @@ func (s *matchService) formatSingleUserAvailabilityHTML(userName string, availab
 			continue
 		}
 		
-		html += fmt.Sprintf("<li>%s: ", weekday)
+		if !firstEntry {
+			result += "<br/>"
+		}
+		firstEntry = false
+		
+		result += fmt.Sprintf("• <strong>%s</strong>: ", weekday)
+		
 		for i, period := range periods {
 			if i > 0 {
-				html += ", "
+				result += ", "
 			}
-			// Use Polish translation if available, otherwise use original
-			if polishName, ok := periodNames[period]; ok {
-				html += polishName
+			// Use readable name if available, otherwise use original
+			if readableName, ok := periodNames[period]; ok {
+				result += readableName
 			} else {
-				html += period
+				result += period
 			}
 		}
-		html += "</li>"
 	}
-	html += "</ul></div>"
 	
-	return html
+	if result == "" {
+		return "No availability provided"
+	}
+	
+	return result
 }
 
 func (s *matchService) GetMatchAvailabilities(userID uint, matchID uint) ([]*models.MatchAvailability, error) {
