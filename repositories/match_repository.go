@@ -63,7 +63,9 @@ func (r *matchRepository) FindCurrentByUserID(userID uint) (*models.Match, error
 
 func (r *matchRepository) FindByOrganisation(organisationID uint) ([]*models.Match, error) {
 	var matches []*models.Match
-	err := r.db.Preload("User1").Preload("User2").Preload("Availabilities").Preload("Feedbacks.User").
+	err := r.db.Preload("User1.Tags").Preload("User2.Tags").
+		Preload("User1.AvailabilityConfig").Preload("User2.AvailabilityConfig").
+		Preload("Availabilities.User").Preload("Feedbacks.User").
 		Where("organisation_id = ?", organisationID).
 		Order("created_at DESC").
 		Find(&matches).Error
@@ -72,7 +74,9 @@ func (r *matchRepository) FindByOrganisation(organisationID uint) ([]*models.Mat
 
 func (r *matchRepository) FindByUserID(userID uint) ([]*models.Match, error) {
 	var matches []*models.Match
-	err := r.db.Preload("User1").Preload("User2").Preload("Availabilities").Preload("Feedbacks.User").
+	err := r.db.Preload("User1.Tags").Preload("User2.Tags").
+		Preload("User1.AvailabilityConfig").Preload("User2.AvailabilityConfig").
+		Preload("Availabilities.User").Preload("Feedbacks.User").
 		Where("user1_id = ? OR user2_id = ?", userID, userID).
 		Order("created_at DESC").
 		Find(&matches).Error
@@ -90,7 +94,8 @@ func (r *matchRepository) Delete(id uint) error {
 func (r *matchRepository) HasPendingMatch(userID uint) (bool, error) {
 	var count int64
 	err := r.db.Model(&models.Match{}).
-		Where("(user1_id = ? OR user2_id = ?) AND status = ?", userID, userID, models.MatchStatusPending).
+		Where("(user1_id = ? OR user2_id = ?) AND (status = ? OR status = ?)", 
+			userID, userID, models.MatchStatusPending, models.MatchStatusWaitingForFeedback).
 		Count(&count).Error
 	return count > 0, err
 }
