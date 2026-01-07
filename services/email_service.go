@@ -17,7 +17,7 @@ type EmailService interface {
 type emailService struct {
 	apiKey                  string
 	confirmCodeTemplateID   string
-	invitationTemplateID    string
+	userInvitationTemplateID string
 	matchAcceptedTemplateID string
 }
 
@@ -25,7 +25,7 @@ func NewEmailService() EmailService {
 	return &emailService{
 		apiKey:                  os.Getenv("SENDGRID_API_KEY"),
 		confirmCodeTemplateID:   os.Getenv("CONFIRM_CODE_TEMPLATE_ID"),
-		invitationTemplateID:    os.Getenv("INVITATION_TEMPLATE_ID"),
+		userInvitationTemplateID: os.Getenv("USER_INVITATION_TEMPLATE_ID"),
 		matchAcceptedTemplateID: os.Getenv("MATCH_ACCEPTED_TEMPLATE_ID"),
 	}
 }
@@ -63,8 +63,8 @@ func (s *emailService) SendConfirmCode(toEmail string, toName string, confirmCod
 }
 
 func (s *emailService) SendInvitation(toEmail string, toName string, organisationName string) error {
-	if s.apiKey == "" || s.invitationTemplateID == "" {
-		return fmt.Errorf("sendgrid not configured for invitations: API_KEY=%v, TEMPLATE_ID=%v", s.apiKey != "", s.invitationTemplateID != "")
+	if s.apiKey == "" || s.userInvitationTemplateID == "" {
+		return fmt.Errorf("sendgrid not configured for invitations: API_KEY=%v, TEMPLATE_ID=%v", s.apiKey != "", s.userInvitationTemplateID != "")
 	}
 	
 	from := mail.NewEmail("Virtual Cuppa", "noreply@notacv.com")
@@ -72,10 +72,11 @@ func (s *emailService) SendInvitation(toEmail string, toName string, organisatio
 	
 	message := mail.NewV3Mail()
 	message.SetFrom(from)
-	message.SetTemplateID(s.invitationTemplateID)
+	message.SetTemplateID(s.userInvitationTemplateID)
 	
 	personalization := mail.NewPersonalization()
 	personalization.AddTos(to)
+	personalization.SetDynamicTemplateData("UserName", toName)
 	personalization.SetDynamicTemplateData("OrganisationName", organisationName)
 	
 	message.AddPersonalizations(personalization)
@@ -113,6 +114,16 @@ func (s *emailService) SendMatchAccepted(toEmail string, toName string, matchNam
 	
 	message.AddPersonalizations(personalization)
 	
+	// Log payload for debugging
+	fmt.Printf("SendGrid Payload for SendMatchAccepted:\n")
+	fmt.Printf("  To: %s (%s)\n", toEmail, toName)
+	fmt.Printf("  Template ID: %s\n", s.matchAcceptedTemplateID)
+	fmt.Printf("  MatchName: %s\n", matchName)
+	fmt.Printf("  AvailabilitySlots (%d items):\n", len(availabilitySlots))
+	for i, slot := range availabilitySlots {
+		fmt.Printf("    [%d] Day: %s, Period: %s\n", i, slot.Day, slot.Period)
+	}
+	
 	client := sendgrid.NewSendClient(s.apiKey)
 	response, err := client.Send(message)
 	
@@ -123,6 +134,8 @@ func (s *emailService) SendMatchAccepted(toEmail string, toName string, matchNam
 	if response.StatusCode >= 400 {
 		return fmt.Errorf("sendgrid error for match accepted notification to %s: status code %d, body: %s", toEmail, response.StatusCode, response.Body)
 	}
+	
+	fmt.Printf("SendGrid response: Status %d\n", response.StatusCode)
 	
 	return nil
 }

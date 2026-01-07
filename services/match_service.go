@@ -21,8 +21,8 @@ var (
 
 // AvailabilitySlot represents a single availability time slot for email templates
 type AvailabilitySlot struct {
-	Day    string `json:"day"`
-	Period string `json:"period"`
+	Day    string `json:"Day"`
+	Period string `json:"Period"`
 }
 
 type MatchService interface {

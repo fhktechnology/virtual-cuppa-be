@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Match Accepted - Virtual Cuppa</title>
+    <title>Invitation to Virtual Cuppa</title>
   </head>
   <body
     style="
@@ -57,7 +57,7 @@
                     line-height: 1.6;
                   "
                 >
-                  Hi there,
+                  Hi <strong>{{UserName}}</strong>,
                 </p>
                 <p
                   style="
@@ -67,8 +67,8 @@
                     line-height: 1.6;
                   "
                 >
-                  Great news! <strong>{{MatchName}}</strong> has accepted your
-                  match and provided their availability.
+                  You've been invited to join
+                  <strong>{{OrganisationName}}</strong> on Virtual Cuppa!
                 </p>
                 <p
                   style="
@@ -78,11 +78,12 @@
                     line-height: 1.6;
                   "
                 >
-                  Please log in to your dashboard to accept the match and
-                  provide your availability.
+                  Virtual Cuppa helps connect team members for casual coffee
+                  chats, fostering better relationships and collaboration across
+                  your organization.
                 </p>
 
-                <!-- Availability Section -->
+                <!-- What's Next Section -->
                 <div
                   style="
                     background-color: #f8f9fa;
@@ -99,14 +100,30 @@
                       font-weight: bold;
                     "
                   >
-                    {{MatchName}}'s Availability
+                    What's Next?
                   </h3>
-                  <div style="color: #333333; font-size: 14px; line-height: 2">
-                    {{#each AvailabilitySlots}}
-                      • <strong>{{Day}}</strong>: {{Period}}<br/>
-                    {{/each}}
+                  <div
+                    style="color: #333333; font-size: 14px; line-height: 1.8"
+                  >
+                    <p style="margin: 0 0 10px 0">
+                      1. Log in to your Virtual Cuppa account<br />
+                      2. Complete your profile and set your availability<br />
+                      3. Start getting matched with colleagues for coffee chats
+                    </p>
                   </div>
                 </div>
+
+                <p
+                  style="
+                    margin: 20px 0 0 0;
+                    color: #666666;
+                    font-size: 14px;
+                    line-height: 1.6;
+                  "
+                >
+                  If you have any questions, feel free to reach out to your
+                  organization administrator.
+                </p>
               </td>
             </tr>
 

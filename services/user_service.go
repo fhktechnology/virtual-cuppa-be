@@ -202,10 +202,7 @@ func (s *userService) CreateUser(adminID uint, input *models.CreateUserInput) (*
 	// Send invitation email
 	org, err := s.orgRepo.FindByID(*admin.OrganisationID)
 	if err == nil && org != nil {
-		if err := s.emailSvc.SendInvitation(user.Email, user.FirstName+" "+user.LastName, org.Name); err != nil {
-			// Log error but don't fail user creation
-			// In production, you might want to use proper logging
-		}
+		s.emailSvc.SendInvitation(user.Email, user.FirstName+" "+user.LastName, org.Name)
 	}
 
 	return user, nil
