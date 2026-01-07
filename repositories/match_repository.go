@@ -93,9 +93,14 @@ func (r *matchRepository) Delete(id uint) error {
 
 func (r *matchRepository) HasPendingMatch(userID uint) (bool, error) {
 	var count int64
+	// User has pending match if:
+	// 1. Match status is pending OR waiting_for_feedback
+	// 2. User hasn't completed their part yet (either not accepted, or accepted but not given feedback)
 	err := r.db.Model(&models.Match{}).
-		Where("(user1_id = ? OR user2_id = ?) AND (status = ? OR status = ?)", 
-			userID, userID, models.MatchStatusPending, models.MatchStatusWaitingForFeedback).
+		Where(`((user1_id = ? AND (status = ? OR status = ?)) OR 
+		       (user2_id = ? AND (status = ? OR status = ?)))`, 
+			userID, models.MatchStatusPending, models.MatchStatusWaitingForFeedback,
+			userID, models.MatchStatusPending, models.MatchStatusWaitingForFeedback).
 		Count(&count).Error
 	return count > 0, err
 }

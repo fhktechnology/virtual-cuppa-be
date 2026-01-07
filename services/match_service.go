@@ -158,12 +158,12 @@ func (s *matchService) GenerateMatchesForOrganisation(organisationID uint) (int,
 			user1 := availableUsers[i]
 			user2 := availableUsers[j]
 
-			// Check if they were recently matched (within 30 days)
-			wasRecent, err := s.matchHistoryRepo.WasRecentlyMatched(user1.ID, user2.ID, 30)
+			// Check if they were ever matched before
+			wasMatched, err := s.matchHistoryRepo.WasEverMatched(user1.ID, user2.ID)
 			if err != nil {
 				return 0, err
 			}
-			if wasRecent {
+			if wasMatched {
 				continue
 			}
 			
@@ -297,9 +297,9 @@ func (s *matchService) TryGenerateMatchForUser(userID uint) error {
 			continue
 		}
 
-		// Check if they were recently matched (within 30 days)
-		wasRecent, err := s.matchHistoryRepo.WasRecentlyMatched(userID, u.ID, 30)
-		if err != nil || wasRecent {
+		// Check if they were ever matched before
+		wasMatched, err := s.matchHistoryRepo.WasEverMatched(userID, u.ID)
+		if err != nil || wasMatched {
 			continue
 		}
 		
