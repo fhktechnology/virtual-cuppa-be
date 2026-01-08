@@ -472,6 +472,7 @@ func (s *matchService) AcceptMatch(userID uint, matchID uint) error {
 					otherUser.Email,
 					otherUserName,
 					currentUserName,
+					currentUser.Email,
 					availabilitySlots,
 				)
 				if err != nil {
@@ -560,10 +561,18 @@ func (s *matchService) AcceptMatchWithAvailability(userID uint, matchID uint, av
 	if otherUser != nil {
 		availabilitySlots := s.formatAvailabilitySlots(availability)
 		
+		var currentUserEmail string
+		if updatedMatch.User1ID == userID {
+			currentUserEmail = updatedMatch.User1.Email
+		} else {
+			currentUserEmail = updatedMatch.User2.Email
+		}
+		
 		s.emailSvc.SendMatchAccepted(
 			otherUser.Email,
 			fmt.Sprintf("%s %s", otherUser.FirstName, otherUser.LastName),
 			currentUserName,
+			currentUserEmail,
 			availabilitySlots,
 		)
 	}

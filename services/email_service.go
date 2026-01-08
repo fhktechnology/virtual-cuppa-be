@@ -11,7 +11,7 @@ import (
 type EmailService interface {
 	SendConfirmCode(toEmail string, toName string, confirmCode string) error
 	SendInvitation(toEmail string, toName string, organisationName string) error
-	SendMatchAccepted(toEmail string, toName string, matchName string, availabilitySlots []AvailabilitySlot) error
+	SendMatchAccepted(toEmail string, toName string, matchName string, matchEmail string, availabilitySlots []AvailabilitySlot) error
 }
 
 type emailService struct {
@@ -19,6 +19,7 @@ type emailService struct {
 	confirmCodeTemplateID   string
 	userInvitationTemplateID string
 	matchAcceptedTemplateID string
+	appURL                  string
 }
 
 func NewEmailService() EmailService {
@@ -27,6 +28,7 @@ func NewEmailService() EmailService {
 		confirmCodeTemplateID:   os.Getenv("CONFIRM_CODE_TEMPLATE_ID"),
 		userInvitationTemplateID: os.Getenv("USER_INVITATION_TEMPLATE_ID"),
 		matchAcceptedTemplateID: os.Getenv("MATCH_ACCEPTED_TEMPLATE_ID"),
+		appURL:                  os.Getenv("APP_URL"),
 	}
 }
 
@@ -78,6 +80,7 @@ func (s *emailService) SendInvitation(toEmail string, toName string, organisatio
 	personalization.AddTos(to)
 	personalization.SetDynamicTemplateData("UserName", toName)
 	personalization.SetDynamicTemplateData("OrganisationName", organisationName)
+	personalization.SetDynamicTemplateData("AppURL", s.appURL)
 	
 	message.AddPersonalizations(personalization)
 	
@@ -95,7 +98,7 @@ func (s *emailService) SendInvitation(toEmail string, toName string, organisatio
 	return nil
 }
 
-func (s *emailService) SendMatchAccepted(toEmail string, toName string, matchName string, availabilitySlots []AvailabilitySlot) error {
+func (s *emailService) SendMatchAccepted(toEmail string, toName string, matchName string, matchEmail string, availabilitySlots []AvailabilitySlot) error {
 	if s.apiKey == "" || s.matchAcceptedTemplateID == "" {
 		return fmt.Errorf("sendgrid not configured for match accepted notifications: API_KEY=%v, TEMPLATE_ID=%v", s.apiKey != "", s.matchAcceptedTemplateID != "")
 	}
@@ -110,6 +113,7 @@ func (s *emailService) SendMatchAccepted(toEmail string, toName string, matchNam
 	personalization := mail.NewPersonalization()
 	personalization.AddTos(to)
 	personalization.SetDynamicTemplateData("MatchName", matchName)
+	personalization.SetDynamicTemplateData("MatchEmail", matchEmail)
 	personalization.SetDynamicTemplateData("AvailabilitySlots", availabilitySlots)
 	
 	message.AddPersonalizations(personalization)
